@@ -8,7 +8,7 @@
   <title>AsanaFlow — Personal Work, Deadlines &amp; Google Calendar Hub</title>
   <meta name="description" content="Asana-inspired personal task manager, Kanban board, deadline tracker, and Google Calendar workspace built for GitHub Pages.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='26' r='18' fill='%23f06a6a'/><circle cx='25' cy='70' r='18' fill='%23f06a6a'/><circle cx='75' cy='70' r='18' fill='%23f06a6a'/></svg>">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=3">
   <!-- Google Identity Services for optional 2-way client-side Google Calendar API sync on GitHub Pages -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -795,9 +795,6 @@
               📂 Restore from Backup (.json)
               <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
             </label>
-            <button type="button" class="btn btn-ghost btn-sm" id="resetDemoDataBtn">
-              🔄 Reset Sample Tasks
-            </button>
             <button type="button" class="btn btn-danger-ghost btn-sm" id="clearAllTasksBtn">
               🗑️ Wipe All Data
             </button>
@@ -841,6 +838,6 @@
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

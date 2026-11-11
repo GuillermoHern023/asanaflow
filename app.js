@@ -77,19 +77,15 @@ function loadState() {
       }
     };
 
-    // One-time cleanup: remove the initial 6 template tasks & unused template projects
-    // while keeping any projects (like "To do list") and tasks the user created!
-    if (!parsed.settings || !parsed.settings.cleanedTemplateV2) {
-      merged.tasks = (merged.tasks || []).filter((t) => !DEMO_TASK_IDS.includes(t.id));
-      merged.projects = (merged.projects || []).filter((p) => {
-        if (!DEMO_PROJECT_IDS.includes(p.id)) return true;
-        // Keep a template project only if the user added their own task to it
-        return merged.tasks.some((t) => t.projectId === p.id);
-      });
-      if (merged.projects.length === 0) {
-        merged.projects = [{ id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }];
-      }
-      merged.settings.cleanedTemplateV2 = true;
+    // Always strip any legacy template tasks & template projects while keeping user projects ("To do list") and user tasks
+    const beforeTasksLen = (merged.tasks || []).length;
+    const beforeProjsLen = (merged.projects || []).length;
+    merged.tasks = (merged.tasks || []).filter((t) => !DEMO_TASK_IDS.includes(t.id));
+    merged.projects = (merged.projects || []).filter((p) => !DEMO_PROJECT_IDS.includes(p.id));
+    if (merged.projects.length === 0) {
+      merged.projects = [{ id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }];
+    }
+    if (merged.tasks.length !== beforeTasksLen || merged.projects.length !== beforeProjsLen) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     }
 
