@@ -34,6 +34,12 @@ jobs:
         with:
           path: "."
 
+      - name: Clear any stale Pages deployment lock
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST /repos/${{ github.repository }}/pages/deployments/26d6b922324cf6c2c9f3c076cf91582c45c9a41e/cancel || true
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
