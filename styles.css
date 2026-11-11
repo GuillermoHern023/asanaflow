@@ -972,7 +972,23 @@ body {
 .section-header-flex {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
+}
+
+.section-caret-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.section-caret-btn:hover {
+  background-color: var(--surface-sub);
+  color: var(--text-main);
 }
 
 .section-title-input {
@@ -984,12 +1000,81 @@ body {
   padding: 2px 6px;
   border-radius: 4px;
   font-family: inherit;
+  min-width: 180px;
 }
 
 .section-title-input:hover,
 .section-title-input:focus {
   border-color: var(--btn-border);
   outline: none;
+}
+
+.section-action-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 2px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.section-action-btn:hover {
+  background-color: var(--surface-sub);
+  color: var(--text-main);
+}
+
+.section-del-btn {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.45;
+}
+
+.asana-section-tr:hover .section-del-btn {
+  opacity: 1;
+}
+
+.section-del-btn:hover {
+  color: #dc2626;
+  background-color: rgba(220, 38, 38, 0.08);
+}
+
+/* Inline "Add task..." Row at bottom of each section */
+.asana-add-task-tr td {
+  height: 34px;
+  padding: 0 24px 0 36px;
+  border-bottom: 1px solid var(--grid-border);
+  border-right: none !important;
+}
+
+.inline-section-add-task-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-section-add-task-btn:hover {
+  color: var(--text-main);
+  background-color: var(--surface-sub);
 }
 
 /* Name Cell inside Grid Row */

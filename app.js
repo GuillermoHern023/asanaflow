@@ -123,13 +123,21 @@ function loadState() {
       ];
     }
 
-    // Ensure every project has a sections array
+    // Ensure every project has a sections array and clean up accidental empty "Untitled section" duplicates
     merged.projects.forEach((p) => {
       if (!p.color) p.color = '#f06a9a';
       if (!Array.isArray(p.sections) || p.sections.length === 0) {
         p.sections = [{ id: 'sec_default', name: '' }];
+      } else if (!merged.settings.cleanedEmptyUntitledSectionsV1) {
+        p.sections = p.sections.filter((sec, idx) => {
+          if (idx === 0) return true;
+          const hasTasks = (merged.tasks || []).some((t) => t.projectId === p.id && t.sectionId === sec.id);
+          if (sec.name === 'Untitled section' && !hasTasks) return false;
+          return true;
+        });
       }
     });
+    merged.settings.cleanedEmptyUntitledSectionsV1 = true;
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return merged;
@@ -615,7 +623,7 @@ function createNewTask(taskData = {}) {
 
   const newTask = {
     id: generateId('task'),
-    title: (taskData.title ?? '').trim(),
+    title: String(taskData.title ?? ''),
     projectId: projId,
     sectionId: taskData.sectionId || defaultSecId,
     status: taskData.status || 'todo',
@@ -638,7 +646,17 @@ function createNewTask(taskData = {}) {
     createdAt: Date.now()
   };
 
-  state.tasks.push(newTask);
+  if (taskData.afterTaskId) {
+    const idx = state.tasks.findIndex((t) => t.id === taskData.afterTaskId);
+    if (idx !== -1) {
+      state.tasks.splice(idx + 1, 0, newTask);
+    } else {
+      state.tasks.push(newTask);
+    }
+  } else {
+    state.tasks.push(newTask);
+  }
+
   saveState();
   return newTask;
 }
@@ -700,6 +718,9 @@ function deleteProject(projectId) {
 }
 
 function addSectionToCurrentProject() {
+  if (selectedProjectId === 'all' && state.projects.length > 0) {
+    selectedProjectId = state.projects[0].id;
+  }
   const proj = getProjectById(selectedProjectId);
   if (!proj) return;
   proj.sections = proj.sections || [{ id: 'sec_default', name: '' }];
@@ -708,17 +729,52 @@ function addSectionToCurrentProject() {
     name: 'Untitled section'
   };
   proj.sections.push(newSec);
+  // Automatically create an initial empty task row in the new section so the user can immediately add tasks under it
+  createNewTask({ title: '', projectId: proj.id, sectionId: newSec.id });
   saveState();
-  renderListView();
-  // Focus the new section title input
-  setTimeout(() => {
-    const inputs = document.querySelectorAll('.section-title-input');
-    const last = inputs[inputs.length - 1];
-    if (last) {
-      last.focus();
-      last.select();
+  renderAll();
+  // Focus and select the new section title input
+  const secInput = document.querySelector(`tr[data-section-id="${newSec.id}"] .section-title-input`);
+  if (secInput) {
+    secInput.focus();
+    secInput.select();
+  }
+}
+
+function deleteSectionFromCurrentProject(sectionId) {
+  const proj = getProjectById(selectedProjectId);
+  if (!proj || !Array.isArray(proj.sections)) return;
+  if (proj.sections.length <= 1) {
+    proj.sections[0].name = '';
+    saveState();
+    renderAll();
+    return;
+  }
+  const idx = proj.sections.findIndex((s) => s.id === sectionId);
+  if (idx === -1) return;
+  proj.sections.splice(idx, 1);
+  const fallbackSecId = proj.sections[0].id;
+  // Remove blank tasks in the deleted section; move any non-empty tasks to the first section
+  state.tasks = state.tasks.filter((t) => {
+    if (t.projectId === proj.id && t.sectionId === sectionId) {
+      if (!t.title || !t.title.trim()) return false;
+      t.sectionId = fallbackSecId;
     }
-  }, 20);
+    return true;
+  });
+  saveState();
+  renderAll();
+}
+
+function focusFirstTaskInSection(sectionId) {
+  const row = document.querySelector(`tr.asana-grid-row[data-section-id="${sectionId}"] .asana-row-input`);
+  if (row) {
+    row.focus();
+    return;
+  }
+  const newTask = createNewTask({ title: '', sectionId });
+  renderAll();
+  focusTaskRowInput(newTask.id);
 }
 
 // ==========================================================================
@@ -820,31 +876,71 @@ function renderListView() {
   tbody.innerHTML = '';
 
   sections.forEach((sec, secIndex) => {
+    const isCollapsed = Boolean(state.settings.collapsedSections && state.settings.collapsedSections[sec.id]);
+
     // Render section header if it has a name or is not the first default unnamed section
     if (sec.name || secIndex > 0) {
       const secTr = document.createElement('tr');
       secTr.className = 'asana-section-tr';
+      secTr.dataset.sectionId = sec.id;
       secTr.innerHTML = `
         <td colspan="5">
           <div class="section-header-flex">
-            <span>▾</span>
+            <button type="button" class="section-caret-btn" title="Collapse/expand section" aria-label="Toggle section">
+              ${isCollapsed ? '▸' : '▾'}
+            </button>
             <input type="text" class="section-title-input" value="${escapeHtml(sec.name || 'Untitled section')}" aria-label="Section name">
+            <button type="button" class="section-action-btn section-add-task-btn" title="Add task to this section">+ Add task</button>
+            <button type="button" class="section-del-btn" title="Delete section" aria-label="Delete section">✕</button>
           </div>
         </td>
       `;
-      const input = secTr.querySelector('.section-title-input');
-      input.addEventListener('change', () => {
-        sec.name = input.value.trim() || 'Untitled section';
+
+      secTr.querySelector('.section-caret-btn').addEventListener('click', () => {
+        state.settings.collapsedSections = state.settings.collapsedSections || {};
+        state.settings.collapsedSections[sec.id] = !isCollapsed;
         saveState();
+        renderListView();
+      });
+
+      const input = secTr.querySelector('.section-title-input');
+      input.addEventListener('input', () => {
+        sec.name = input.value;
+        saveState();
+      });
+      input.addEventListener('blur', () => {
+        if (!input.value.trim()) {
+          sec.name = 'Untitled section';
+          input.value = sec.name;
+          saveState();
+        }
       });
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
           e.preventDefault();
-          input.blur();
+          sec.name = input.value.trim() || 'Untitled section';
+          saveState();
+          focusFirstTaskInSection(sec.id);
         }
       });
+
+      secTr.querySelector('.section-add-task-btn').addEventListener('click', () => {
+        if (isCollapsed) {
+          state.settings.collapsedSections[sec.id] = false;
+        }
+        const newTask = createNewTask({ title: '', sectionId: sec.id });
+        renderAll();
+        focusTaskRowInput(newTask.id);
+      });
+
+      secTr.querySelector('.section-del-btn').addEventListener('click', () => {
+        deleteSectionFromCurrentProject(sec.id);
+      });
+
       tbody.appendChild(secTr);
     }
+
+    if (isCollapsed) return;
 
     const secTasks = filteredTasks.filter((t) => {
       if (selectedProjectId === 'all') return true;
@@ -853,15 +949,36 @@ function renderListView() {
     });
 
     secTasks.forEach((task, idx) => {
-      tbody.appendChild(createSpreadsheetTaskRow(task, PLACEHOLDER_HINTS[idx] || 'Write a task name'));
+      const hint = secIndex === 0 ? PLACEHOLDER_HINTS[idx] || 'Write a task name' : 'Write a task name';
+      tbody.appendChild(createSpreadsheetTaskRow(task, hint));
     });
 
-    // If this is the first section and there are fewer than 3 tasks, render the exact 3 Asana placeholder rows!
-    if (secIndex === 0 && secTasks.length < 3 && searchQuery.trim() === '' && statusFilter === 'all' && priorityFilter === 'all') {
+    const noFiltersActive = searchQuery.trim() === '' && statusFilter === 'all' && priorityFilter === 'all';
+
+    // If this is the first section and there are fewer than 3 tasks, render the 3 Asana placeholder rows
+    if (secIndex === 0 && secTasks.length < 3 && noFiltersActive) {
       for (let i = secTasks.length; i < 3; i++) {
         tbody.appendChild(createPlaceholderSpreadsheetRow(PLACEHOLDER_HINTS[i], sec.id));
       }
+    } else if (secIndex > 0 && secTasks.length === 0 && noFiltersActive) {
+      // Every newly created or empty section always shows a ready-to-type task row!
+      tbody.appendChild(createPlaceholderSpreadsheetRow('Write a task name', sec.id));
     }
+
+    // Inline "+ Add task..." row at the bottom of EVERY section so the user can always add more tasks
+    const addTaskRow = document.createElement('tr');
+    addTaskRow.className = 'asana-add-task-tr';
+    addTaskRow.innerHTML = `
+      <td colspan="5">
+        <button type="button" class="inline-section-add-task-btn">+ Add task...</button>
+      </td>
+    `;
+    addTaskRow.querySelector('.inline-section-add-task-btn').addEventListener('click', () => {
+      const newTask = createNewTask({ title: '', sectionId: sec.id });
+      renderAll();
+      focusTaskRowInput(newTask.id);
+    });
+    tbody.appendChild(addTaskRow);
   });
 }
 
@@ -869,6 +986,7 @@ function createSpreadsheetTaskRow(task, placeholderText = 'Write a task name') {
   const tr = document.createElement('tr');
   tr.className = `asana-grid-row ${task.completed ? 'completed' : ''}`;
   tr.dataset.taskId = task.id;
+  tr.dataset.sectionId = task.sectionId || 'sec_default';
 
   const deadline = getDeadlineStatus(task.dueDate, task.completed);
   const prioClass = task.priority ? `prio-${task.priority}` : '';
@@ -930,11 +1048,12 @@ function createSpreadsheetTaskRow(task, placeholderText = 'Write a task name') {
     toggleTaskCompletion(task.id);
   });
 
-  // 2. Inline Title Input (saves as you type, Enter creates a new row below!)
+  // 2. Inline Title Input (saves in-place as you type without re-rendering DOM, Enter creates a new row below!)
   const nameInput = tr.querySelector('.asana-row-input');
   nameInput.addEventListener('input', () => {
     task.title = nameInput.value;
     saveState();
+    renderTopbarAndSidebar();
     const gcalLink = tr.querySelector('.gcal-mini-link');
     if (gcalLink) gcalLink.href = buildGoogleCalendarTemplateUrl(task);
   });
@@ -943,7 +1062,7 @@ function createSpreadsheetTaskRow(task, placeholderText = 'Write a task name') {
     if (e.key === 'Enter') {
       e.preventDefault();
       if (e.isComposing || e.keyCode === 229) return;
-      const newTask = createNewTask({ sectionId: task.sectionId });
+      const newTask = createNewTask({ title: '', sectionId: task.sectionId, afterTaskId: task.id });
       renderAll();
       focusTaskRowInput(newTask.id);
     } else if (e.key === 'Backspace' && nameInput.value === '') {
@@ -996,27 +1115,31 @@ function createSpreadsheetTaskRow(task, placeholderText = 'Write a task name') {
 }
 
 /**
- * Renders one of the 3 ghost/placeholder rows shown in the screenshot ("e.g. Determine project goal")
- * As soon as the user types or sets a date/priority on it, it promotes into a real saved task!
+ * Renders a ghost/placeholder row ("e.g. Determine project goal" or "Write a task name").
+ * Promotes IN-PLACE when typing so the input element is never destroyed mid-typing!
  */
 function createPlaceholderSpreadsheetRow(placeholderText, sectionId) {
   const tr = document.createElement('tr');
   tr.className = 'asana-grid-row placeholder-row';
+  tr.dataset.sectionId = sectionId || 'sec_default';
+
+  let promotedTask = null;
 
   tr.innerHTML = `
     <td>
       <div class="cell-name-inner">
-        <span class="asana-row-check" aria-hidden="true"></span>
+        <button type="button" class="asana-row-check" aria-label="Mark complete">✓</button>
         <input
           type="text"
           class="asana-row-input"
           placeholder="${escapeHtml(placeholderText)}"
           aria-label="${escapeHtml(placeholderText)}"
         >
+        <button type="button" class="row-open-drawer-btn" title="Open task details &amp; subtasks">Details ›</button>
       </div>
     </td>
     <td>
-      <button type="button" class="dashed-circle-btn" title="Assign to me">
+      <button type="button" class="dashed-circle-btn assignee-toggle-btn" title="Assign to me">
         ${SVG_ASSIGNEE_DASHED}
       </button>
     </td>
@@ -1035,22 +1158,71 @@ function createPlaceholderSpreadsheetRow(placeholderText, sectionId) {
         <option value="urgent">Urgent</option>
       </select>
     </td>
-    <td></td>
+    <td>
+      <div class="cell-actions-inner">
+        <a href="#" target="_blank" rel="noopener" class="gcal-mini-link" title="Add to Google Calendar">+GCal</a>
+        <button type="button" class="row-del-btn" title="Delete row" aria-label="Delete task">✕</button>
+      </div>
+    </td>
   `;
+
+  const ensurePromoted = (initialFields = {}) => {
+    if (!promotedTask) {
+      promotedTask = createNewTask({
+        title: input.value,
+        sectionId,
+        ...initialFields
+      });
+      tr.classList.remove('placeholder-row');
+      tr.dataset.taskId = promotedTask.id;
+    } else {
+      Object.assign(promotedTask, initialFields);
+      saveState();
+    }
+    const gcalLink = tr.querySelector('.gcal-mini-link');
+    if (gcalLink) gcalLink.href = buildGoogleCalendarTemplateUrl(promotedTask);
+    renderTopbarAndSidebar();
+    return promotedTask;
+  };
 
   const input = tr.querySelector('.asana-row-input');
   input.addEventListener('input', () => {
-    if (!input.value) return;
-    const val = input.value;
-    const newTask = createNewTask({ title: val, sectionId });
-    renderAll();
-    focusTaskRowInput(newTask.id, val.length);
+    if (!promotedTask && !input.value) return;
+    const task = ensurePromoted({ title: input.value });
+    task.title = input.value;
+    saveState();
   });
 
-  tr.querySelector('.dashed-circle-btn').addEventListener('click', () => {
-    const newTask = createNewTask({ title: '', assignedToMe: true, sectionId });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.isComposing || e.keyCode === 229) return;
+      const current = ensurePromoted({ title: input.value });
+      const nextTask = createNewTask({ title: '', sectionId, afterTaskId: current.id });
+      renderAll();
+      focusTaskRowInput(nextTask.id);
+    } else if (e.key === 'Backspace' && input.value === '' && promotedTask) {
+      e.preventDefault();
+      deleteTask(promotedTask.id);
+    }
+  });
+
+  tr.querySelector('.asana-row-check').addEventListener('click', () => {
+    const task = ensurePromoted();
+    toggleTaskCompletion(task.id);
+  });
+
+  tr.querySelector('.row-open-drawer-btn').addEventListener('click', () => {
+    const task = ensurePromoted();
+    openTaskDrawer(task.id);
+  });
+
+  tr.querySelector('.assignee-toggle-btn').addEventListener('click', () => {
+    const task = ensurePromoted();
+    task.assignedToMe = !task.assignedToMe;
+    saveState();
     renderAll();
-    focusTaskRowInput(newTask.id);
+    focusTaskRowInput(task.id);
   });
 
   const dateInput = tr.querySelector('.cell-date-native');
@@ -1063,32 +1235,46 @@ function createPlaceholderSpreadsheetRow(placeholderText, sectionId) {
   });
   dateInput.addEventListener('change', () => {
     if (!dateInput.value) return;
-    const newTask = createNewTask({ title: '', dueDate: dateInput.value, sectionId });
+    const task = ensurePromoted({ dueDate: dateInput.value });
     renderAll();
-    focusTaskRowInput(newTask.id);
+    focusTaskRowInput(task.id);
   });
 
   const prioSelect = tr.querySelector('.cell-priority-select');
   prioSelect.addEventListener('change', () => {
-    if (!prioSelect.value) return;
-    const newTask = createNewTask({ title: '', priority: prioSelect.value, sectionId });
+    const task = ensurePromoted({ priority: prioSelect.value });
     renderAll();
-    focusTaskRowInput(newTask.id);
+    focusTaskRowInput(task.id);
+  });
+
+  tr.querySelector('.row-del-btn').addEventListener('click', () => {
+    if (promotedTask) {
+      deleteTask(promotedTask.id);
+    } else {
+      input.value = '';
+    }
   });
 
   return tr;
 }
 
 function focusTaskRowInput(taskId, cursorPos = null) {
-  setTimeout(() => {
+  const focusNow = () => {
     const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
     const input = row?.querySelector('.asana-row-input');
     if (input) {
       input.focus();
       const pos = cursorPos !== null ? cursorPos : input.value.length;
-      input.setSelectionRange(pos, pos);
+      try {
+        input.setSelectionRange(pos, pos);
+      } catch {}
+      return true;
     }
-  }, 10);
+    return false;
+  };
+  if (!focusNow()) {
+    setTimeout(focusNow, 15);
+  }
 }
 
 // ==========================================================================
