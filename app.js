@@ -27,143 +27,16 @@ function generateId(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-// Default starter projects & realistic sample tasks anchored to today
+const DEMO_TASK_IDS = ['task_1', 'task_2', 'task_3', 'task_4', 'task_5', 'task_6'];
+const DEMO_PROJECT_IDS = ['proj_personal', 'proj_work', 'proj_study', 'proj_web'];
+
+// Clean default state (starts fresh with your own "To do list" project and no fake template tasks)
 function createDefaultState() {
-  const now = new Date();
-  const todayStr = toLocalDateString(now);
-
-  const projects = [
-    { id: 'proj_personal', name: 'Personal & Life', icon: '🏡', color: '#10b981' },
-    { id: 'proj_work', name: 'Work & Career', icon: '💼', color: '#f06a6a' },
-    { id: 'proj_study', name: 'University & Study', icon: '🎓', color: '#6366f1' },
-    { id: 'proj_web', name: 'GitHub Pages Projects', icon: '🚀', color: '#f59e0b' }
-  ];
-
-  const tasks = [
-    {
-      id: 'task_1',
-      title: 'Review weekly deadlines & sync with Google Calendar',
-      projectId: 'proj_personal',
-      section: 'today',
-      status: 'in_progress',
-      priority: 'high',
-      dueDate: todayStr,
-      dueTime: '10:00',
-      duration: '60',
-      recurrence: 'weekly',
-      tags: ['planning', 'gcal'],
-      description: 'Check upcoming deadlines for the week and push time-blocked tasks to Google Calendar.',
-      completed: false,
-      gcalEventId: null,
-      subtasks: [
-        { id: 'sub_1', title: 'Check urgent tasks due today', done: true },
-        { id: 'sub_2', title: 'Test 1-click +GCal button or connect OAuth Client ID', done: false },
-        { id: 'sub_3', title: 'Time-block deep work sessions', done: false }
-      ],
-      createdAt: Date.now() - 86400000 * 2
-    },
-    {
-      id: 'task_2',
-      title: 'Deploy AsanaFlow to GitHub Pages repository',
-      projectId: 'proj_web',
-      section: 'today',
-      status: 'todo',
-      priority: 'urgent',
-      dueDate: todayStr,
-      dueTime: '16:30',
-      duration: '60',
-      recurrence: 'none',
-      tags: ['github-pages', 'launch'],
-      description: 'Push repository to GitHub and enable GitHub Pages in Settings -> Pages.',
-      completed: false,
-      gcalEventId: null,
-      subtasks: [
-        { id: 'sub_4', title: 'Push code to main branch', done: true },
-        { id: 'sub_5', title: 'Enable GitHub Pages deployment', done: false }
-      ],
-      createdAt: Date.now() - 86400000
-    },
-    {
-      id: 'task_3',
-      title: 'Submit project milestone deliverable & slides',
-      projectId: 'proj_work',
-      section: 'upcoming',
-      status: 'review',
-      priority: 'high',
-      dueDate: addDays(now, 2),
-      dueTime: '14:00',
-      duration: '90',
-      recurrence: 'none',
-      tags: ['deliverable', 'slides'],
-      description: 'Final polish on executive summary and metrics deck before the deadline.',
-      completed: false,
-      gcalEventId: null,
-      subtasks: [
-        { id: 'sub_6', title: 'Finalize KPI charts', done: true },
-        { id: 'sub_7', title: 'Proofread slide notes', done: true },
-        { id: 'sub_8', title: 'Export PDF backup', done: false }
-      ],
-      createdAt: Date.now() - 3600000 * 12
-    },
-    {
-      id: 'task_4',
-      title: 'Prepare exam practice sets & review notes',
-      projectId: 'proj_study',
-      section: 'upcoming',
-      status: 'todo',
-      priority: 'medium',
-      dueDate: addDays(now, 5),
-      dueTime: '11:00',
-      duration: '120',
-      recurrence: 'none',
-      tags: ['study', 'exam'],
-      description: 'Complete practice workbook exercises and review key formulas.',
-      completed: false,
-      gcalEventId: null,
-      subtasks: [],
-      createdAt: Date.now() - 3600000 * 5
-    },
-    {
-      id: 'task_5',
-      title: 'Follow up on overdue invoice & expense report',
-      projectId: 'proj_work',
-      section: 'today',
-      status: 'todo',
-      priority: 'urgent',
-      dueDate: addDays(now, -1),
-      dueTime: '09:30',
-      duration: '30',
-      recurrence: 'monthly',
-      tags: ['finance', 'admin'],
-      description: 'Send receipt bundle and confirm payment status.',
-      completed: false,
-      gcalEventId: null,
-      subtasks: [],
-      createdAt: Date.now() - 86400000 * 4
-    },
-    {
-      id: 'task_6',
-      title: 'Set up workspace structure & project tags',
-      projectId: 'proj_personal',
-      section: 'later',
-      status: 'done',
-      priority: 'low',
-      dueDate: addDays(now, -2),
-      dueTime: '',
-      duration: '30',
-      recurrence: 'none',
-      tags: ['setup'],
-      description: 'Initial workspace configuration.',
-      completed: true,
-      gcalEventId: null,
-      subtasks: [],
-      createdAt: Date.now() - 86400000 * 5
-    }
-  ];
-
   return {
-    projects,
-    tasks,
+    projects: [
+      { id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }
+    ],
+    tasks: [],
     externalEvents: [], // Imported .ics or Google Calendar API events
     settings: {
       theme: 'system', // 'system' | 'light' | 'dark'
@@ -172,7 +45,8 @@ function createDefaultState() {
       gcalClientId: '',
       gcalCalendarId: 'primary',
       gistToken: '',
-      gistId: ''
+      gistId: '',
+      cleanedTemplateV2: true
     }
   };
 }
@@ -180,7 +54,7 @@ function createDefaultState() {
 // Application Runtime State
 let state = loadState();
 let activeView = 'overview'; // 'overview' | 'list' | 'board' | 'calendar'
-let selectedProjectId = 'all';
+let selectedProjectId = state.projects.length === 1 ? state.projects[0].id : 'all';
 let searchQuery = '';
 let priorityFilter = 'all';
 let statusFilter = 'all';
@@ -194,7 +68,7 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return createDefaultState();
     const parsed = JSON.parse(raw);
-    return {
+    const merged = {
       ...createDefaultState(),
       ...parsed,
       settings: {
@@ -202,6 +76,24 @@ function loadState() {
         ...(parsed.settings || {})
       }
     };
+
+    // One-time cleanup: remove the initial 6 template tasks & unused template projects
+    // while keeping any projects (like "To do list") and tasks the user created!
+    if (!parsed.settings || !parsed.settings.cleanedTemplateV2) {
+      merged.tasks = (merged.tasks || []).filter((t) => !DEMO_TASK_IDS.includes(t.id));
+      merged.projects = (merged.projects || []).filter((p) => {
+        if (!DEMO_PROJECT_IDS.includes(p.id)) return true;
+        // Keep a template project only if the user added their own task to it
+        return merged.tasks.some((t) => t.projectId === p.id);
+      });
+      if (merged.projects.length === 0) {
+        merged.projects = [{ id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }];
+      }
+      merged.settings.cleanedTemplateV2 = true;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+    }
+
+    return merged;
   } catch (err) {
     console.error('Failed to load state from localStorage:', err);
     return createDefaultState();
@@ -836,6 +728,23 @@ function deleteTask(taskId) {
 // Rendering Engine (Sidebar, Overview, List, Kanban Board, Calendar, Drawer)
 // ==========================================================================
 
+function deleteProject(projectId) {
+  if (state.projects.length <= 1) {
+    showToast('You must keep at least one project.');
+    return;
+  }
+  const idx = state.projects.findIndex((p) => p.id === projectId);
+  if (idx === -1) return;
+  const removed = state.projects.splice(idx, 1)[0];
+  state.tasks = state.tasks.filter((t) => t.projectId !== projectId);
+  if (selectedProjectId === projectId) {
+    selectedProjectId = state.projects[0].id;
+  }
+  saveState();
+  renderAll();
+  showToast(`🗑️ Deleted project "${removed.name}" and its tasks`);
+}
+
 function renderAll() {
   renderTopbarAndSidebar();
   renderOverviewView();
@@ -857,13 +766,17 @@ function renderTopbarAndSidebar() {
     });
   }
 
-  // Pending & Due Soon badges
+  // Pending & Due Soon badges (scoped to filtered project if selected)
   const todayStr = toLocalDateString(now);
-  const activeTasks = state.tasks.filter((t) => !t.completed);
-  const dueOrOverdue = activeTasks.filter((t) => t.dueDate && t.dueDate <= todayStr);
+  const allActiveTasks = state.tasks.filter((t) => !t.completed);
+  const scopedActiveTasks =
+    selectedProjectId === 'all'
+      ? allActiveTasks
+      : allActiveTasks.filter((t) => t.projectId === selectedProjectId);
+  const dueOrOverdue = scopedActiveTasks.filter((t) => t.dueDate && t.dueDate <= todayStr);
 
   const badgePending = document.getElementById('badgePendingCount');
-  if (badgePending) badgePending.textContent = String(activeTasks.length);
+  if (badgePending) badgePending.textContent = String(scopedActiveTasks.length);
 
   const badgeUrgent = document.getElementById('badgeDueSoonCount');
   if (badgeUrgent) {
@@ -895,7 +808,7 @@ function renderTopbarAndSidebar() {
     allBtn.innerHTML = `
       <span class="project-color-dot" style="background-color: #94a3b8"></span>
       <span>All Projects</span>
-      <span class="project-count">${activeTasks.length}</span>
+      <span class="project-count">${allActiveTasks.length}</span>
     `;
     allBtn.addEventListener('click', () => {
       selectedProjectId = 'all';
@@ -904,24 +817,36 @@ function renderTopbarAndSidebar() {
     projContainer.appendChild(allBtn);
 
     state.projects.forEach((proj) => {
-      const count = activeTasks.filter((t) => t.projectId === proj.id).length;
-      const item = document.createElement('button');
-      item.type = 'button';
+      const count = allActiveTasks.filter((t) => t.projectId === proj.id).length;
+      const item = document.createElement('div');
       item.className = `project-nav-item ${selectedProjectId === proj.id ? 'active' : ''}`;
       item.innerHTML = `
         <span class="project-color-dot" style="background-color: ${proj.color}"></span>
-        <span>${escapeHtml(proj.icon)} ${escapeHtml(proj.name)}</span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(proj.icon)} ${escapeHtml(proj.name)}</span>
         <span class="project-count">${count}</span>
+        ${
+          state.projects.length > 1
+            ? `<button type="button" class="proj-del-btn" title="Delete project" aria-label="Delete project ${escapeHtml(proj.name)}" style="border:none;background:transparent;color:#9ca3af;cursor:pointer;padding:0 4px;font-size:0.75rem;">✕</button>`
+            : ''
+        }
       `;
-      item.addEventListener('click', () => {
-        selectedProjectId = selectedProjectId === proj.id ? 'all' : proj.id;
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.proj-del-btn')) return;
+        selectedProjectId = proj.id;
         renderAll();
       });
+      const delBtn = item.querySelector('.proj-del-btn');
+      if (delBtn) {
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          deleteProject(proj.id);
+        });
+      }
       projContainer.appendChild(item);
     });
   }
 
-  // Populate Project <select> dropdowns across forms
+  // Populate Project <select> dropdowns across forms and sync with selectedProjectId
   const selectIds = ['quickTaskProject', 'drawerTaskProject', 'modalTaskProject'];
   selectIds.forEach((id) => {
     const sel = document.getElementById(id);
@@ -930,10 +855,10 @@ function renderTopbarAndSidebar() {
     sel.innerHTML = state.projects
       .map((p) => `<option value="${p.id}">${escapeHtml(p.icon)} ${escapeHtml(p.name)}</option>`)
       .join('');
-    if (prevValue && state.projects.some((p) => p.id === prevValue)) {
-      sel.value = prevValue;
-    } else if (selectedProjectId !== 'all') {
+    if (selectedProjectId !== 'all' && id !== 'drawerTaskProject' && state.projects.some((p) => p.id === selectedProjectId)) {
       sel.value = selectedProjectId;
+    } else if (prevValue && state.projects.some((p) => p.id === prevValue)) {
+      sel.value = prevValue;
     }
   });
 }
@@ -942,7 +867,8 @@ function renderOverviewView() {
   const todayStr = toLocalDateString(new Date());
   const nextWeekStr = addDays(new Date(), 7);
 
-  const allTasks = state.tasks;
+  // Respect active project and topbar filters on Home & Overview!
+  const allTasks = getFilteredTasks();
   const active = allTasks.filter((t) => !t.completed);
   const overdue = active.filter((t) => t.dueDate && t.dueDate < todayStr);
   const dueToday = active.filter((t) => t.dueDate === todayStr);
@@ -1980,11 +1906,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const color = document.getElementById('newProjectColor').value || '#f06a6a';
     const newProj = { id: generateId('proj'), name, icon, color };
     state.projects.push(newProj);
+    selectedProjectId = newProj.id;
     saveState();
     document.getElementById('newProjectName').value = '';
     document.getElementById('projectModal')?.close();
     renderAll();
-    showToast(`Created project "${icon} ${name}"`);
+    showToast(`Created and switched to project "${icon} ${name}"`);
   });
 
   // Google Calendar Modal & .ICS Import/Export
