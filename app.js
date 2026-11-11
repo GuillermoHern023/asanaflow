@@ -1,15 +1,46 @@
 /**
- * AsanaFlow — Personal Work, Deadlines & Google Calendar Hub
- * Designed to run 100% client-side on GitHub Pages with:
- *  - Asana List, Kanban Board, Calendar & Overview Views
- *  - 1-Click Google Calendar Template Links + .ics Import/Export
- *  - Full 2-Way Google Calendar REST API v3 OAuth 2.0 Sync
- *  - LocalStorage + JSON Backup + Optional GitHub Gist Cloud Sync
+ * Asana — Personal Work, Deadlines & Google Calendar Hub
+ * Exact Asana Spreadsheet List View, Kanban Board, Calendar & Overview
  */
 
 const STORAGE_KEY = 'asanaflow_workspace_v1';
+const DEMO_TASK_IDS = ['task_1', 'task_2', 'task_3', 'task_4', 'task_5', 'task_6'];
+const DEMO_PROJECT_IDS = ['proj_personal', 'proj_work', 'proj_study', 'proj_web'];
 
-// Helper to format YYYY-MM-DD in local time
+const PLACEHOLDER_HINTS = [
+  'e.g. Determine project goal',
+  'e.g. Schedule kickoff meeting',
+  'e.g. Set final deadline'
+];
+
+// SVG Icons matching the exact Asana screenshot
+const SVG_ASSIGNEE_DASHED = `
+  <span class="dashed-circle-icon" aria-hidden="true">
+    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+      <circle cx="8" cy="5.5" r="2.5"/>
+      <path d="M3.5 13.5c0-2.2 2-3.5 4.5-3.5s4.5 1.3 4.5 3.5" stroke-linecap="round"/>
+    </svg>
+  </span>
+`;
+
+const SVG_CALENDAR_DASHED = `
+  <span class="dashed-circle-icon" aria-hidden="true">
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+      <rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/>
+      <path d="M2.5 6.5h11M5.5 2v2.5M10.5 2v2.5" stroke-linecap="round"/>
+    </svg>
+  </span>
+`;
+
+const SVG_PROJECT_LIST_ICON = `
+  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#1e1f21" stroke-width="2" aria-hidden="true">
+    <path d="M6 4h7M6 8h7M6 12h7" stroke-linecap="round"/>
+    <circle cx="3" cy="4" r="1" fill="#1e1f21"/>
+    <circle cx="3" cy="8" r="1" fill="#1e1f21"/>
+    <circle cx="3" cy="12" r="1" fill="#1e1f21"/>
+  </svg>
+`;
+
 function toLocalDateString(dateObj) {
   const year = dateObj.getFullYear();
   const month = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -27,20 +58,21 @@ function generateId(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
-const DEMO_TASK_IDS = ['task_1', 'task_2', 'task_3', 'task_4', 'task_5', 'task_6'];
-const DEMO_PROJECT_IDS = ['proj_personal', 'proj_work', 'proj_study', 'proj_web'];
-
-// Clean default state (starts fresh with your own "To do list" project and no fake template tasks)
 function createDefaultState() {
   return {
     projects: [
-      { id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }
+      {
+        id: 'proj_todo',
+        name: 'To do list',
+        color: '#f06a9a',
+        sections: [{ id: 'sec_default', name: '' }]
+      }
     ],
     tasks: [],
-    externalEvents: [], // Imported .ics or Google Calendar API events
+    externalEvents: [],
     settings: {
-      theme: 'system', // 'system' | 'light' | 'dark'
-      listGroupBy: 'section', // 'section' | 'status' | 'project'
+      theme: 'light',
+      sortBy: 'manual',
       collapsedSections: {},
       gcalClientId: '',
       gcalCalendarId: 'primary',
@@ -51,13 +83,13 @@ function createDefaultState() {
   };
 }
 
-// Application Runtime State
 let state = loadState();
-let activeView = 'overview'; // 'overview' | 'list' | 'board' | 'calendar'
-let selectedProjectId = state.projects.length === 1 ? state.projects[0].id : 'all';
+let activeView = 'list'; // Default to Asana's signature List view!
+let selectedProjectId = (state.projects[0] && state.projects[0].id) || 'proj_todo';
 let searchQuery = '';
 let priorityFilter = 'all';
 let statusFilter = 'all';
+let sortBy = state.settings.sortBy || 'manual';
 let activeDrawerTaskId = null;
 let calendarCursorDate = new Date();
 let googleTokenClient = null;
@@ -77,21 +109,32 @@ function loadState() {
       }
     };
 
-    // Always strip any legacy template tasks & template projects while keeping user projects ("To do list") and user tasks
-    const beforeTasksLen = (merged.tasks || []).length;
-    const beforeProjsLen = (merged.projects || []).length;
+    // Strip any legacy template tasks and template projects
     merged.tasks = (merged.tasks || []).filter((t) => !DEMO_TASK_IDS.includes(t.id));
     merged.projects = (merged.projects || []).filter((p) => !DEMO_PROJECT_IDS.includes(p.id));
     if (merged.projects.length === 0) {
-      merged.projects = [{ id: 'proj_todo', name: 'To do list', icon: '🚀', color: '#f06a6a' }];
-    }
-    if (merged.tasks.length !== beforeTasksLen || merged.projects.length !== beforeProjsLen) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      merged.projects = [
+        {
+          id: 'proj_todo',
+          name: 'To do list',
+          color: '#f06a9a',
+          sections: [{ id: 'sec_default', name: '' }]
+        }
+      ];
     }
 
+    // Ensure every project has a sections array
+    merged.projects.forEach((p) => {
+      if (!p.color) p.color = '#f06a9a';
+      if (!Array.isArray(p.sections) || p.sections.length === 0) {
+        p.sections = [{ id: 'sec_default', name: '' }];
+      }
+    });
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
     return merged;
   } catch (err) {
-    console.error('Failed to load state from localStorage:', err);
+    console.error('Failed to load state:', err);
     return createDefaultState();
   }
 }
@@ -108,9 +151,6 @@ function saveState() {
 // Modern Web Guidance Compliance Helpers
 // ==========================================================================
 
-/**
- * Fallback for browsers without <dialog closedby="any"> support
- */
 function setupDialogLightDismissFallbacks() {
   const dialogs = document.querySelectorAll('dialog.app-dialog');
   dialogs.forEach((dialog) => {
@@ -132,15 +172,11 @@ function setupDialogLightDismissFallbacks() {
   document.querySelectorAll('[data-close-dialog]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const dialogId = btn.getAttribute('data-close-dialog');
-      const dialog = document.getElementById(dialogId);
-      if (dialog) dialog.close();
+      document.getElementById(dialogId)?.close();
     });
   });
 }
 
-/**
- * Attach IME-safe Enter-to-submit handler on single-line or multiline inputs
- */
 function attachImeSafeEnterSubmit(inputElement, formElement, isMultiline = false) {
   if (!inputElement || !formElement) return;
   inputElement.addEventListener('keydown', (event) => {
@@ -160,36 +196,37 @@ function attachImeSafeEnterSubmit(inputElement, formElement, isMultiline = false
 
 function applyTheme() {
   const root = document.documentElement;
-  const mode = state.settings.theme || 'system';
+  const mode = state.settings.theme || 'light';
   if (mode === 'light' || mode === 'dark') {
     root.setAttribute('data-theme', mode);
   } else {
     root.removeAttribute('data-theme');
   }
-  const btn = document.getElementById('themeToggleBtn');
-  if (btn) {
-    const labels = { system: '🌗 Auto', light: '☀️ Light', dark: '🌙 Dark' };
-    btn.textContent = labels[mode] || '🌗 Theme';
-  }
 }
 
-function cycleTheme() {
-  const order = ['system', 'light', 'dark'];
-  const idx = order.indexOf(state.settings.theme || 'system');
-  state.settings.theme = order[(idx + 1) % order.length];
+function toggleTheme() {
+  state.settings.theme = state.settings.theme === 'dark' ? 'light' : 'dark';
   saveState();
   applyTheme();
-  showToast(`Theme set to ${state.settings.theme}`);
+  showToast(`Switched to ${state.settings.theme} mode`);
+}
+
+function formatHumanDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 function getDeadlineStatus(dueDateStr, completed) {
-  if (!dueDateStr) return { code: 'none', label: 'No date', className: '' };
+  if (!dueDateStr) return { code: 'none', label: '', className: '' };
   const todayStr = toLocalDateString(new Date());
   if (completed) {
     return { code: 'completed', label: formatHumanDate(dueDateStr), className: '' };
   }
   if (dueDateStr < todayStr) {
-    return { code: 'overdue', label: `Overdue • ${formatHumanDate(dueDateStr)}`, className: 'overdue' };
+    return { code: 'overdue', label: formatHumanDate(dueDateStr), className: 'overdue' };
   }
   if (dueDateStr === todayStr) {
     return { code: 'today', label: 'Today', className: 'due-today' };
@@ -201,28 +238,13 @@ function getDeadlineStatus(dueDateStr, completed) {
   return { code: 'upcoming', label: formatHumanDate(dueDateStr), className: '' };
 }
 
-function formatHumanDate(dateStr) {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  if (!y || !m || !d) return dateStr;
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
-
 function getProjectById(projectId) {
-  return (
-    state.projects.find((p) => p.id === projectId) || {
-      id: 'proj_personal',
-      name: 'General',
-      icon: '📌',
-      color: '#64748b'
-    }
-  );
+  return state.projects.find((p) => p.id === projectId) || state.projects[0];
 }
 
 function getFilteredTasks() {
   const todayStr = toLocalDateString(new Date());
-  return state.tasks.filter((task) => {
+  let list = state.tasks.filter((task) => {
     if (selectedProjectId !== 'all' && task.projectId !== selectedProjectId) {
       return false;
     }
@@ -240,33 +262,40 @@ function getFilteredTasks() {
     }
     if (searchQuery.trim() !== '') {
       const q = searchQuery.toLowerCase();
-      const proj = getProjectById(task.projectId);
-      const inTitle = task.title.toLowerCase().includes(q);
+      const inTitle = (task.title || '').toLowerCase().includes(q);
       const inDesc = (task.description || '').toLowerCase().includes(q);
       const inTags = (task.tags || []).some((t) => t.toLowerCase().includes(q));
-      const inProj = proj.name.toLowerCase().includes(q);
-      if (!inTitle && !inDesc && !inTags && !inProj) return false;
+      if (!inTitle && !inDesc && !inTags) return false;
     }
     return true;
   });
+
+  if (sortBy === 'dueDate') {
+    list = [...list].sort((a, b) => (a.dueDate || '9999-12-31').localeCompare(b.dueDate || '9999-12-31'));
+  } else if (sortBy === 'priority') {
+    const order = { urgent: 0, high: 1, medium: 2, low: 3, '': 4 };
+    list = [...list].sort((a, b) => (order[a.priority || ''] ?? 4) - (order[b.priority || ''] ?? 4));
+  } else if (sortBy === 'title') {
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+    list = [...list].sort((a, b) => collator.compare(a.title || '', b.title || ''));
+  }
+
+  return list;
 }
 
 // ==========================================================================
-// Google Calendar Deep-Link, .ICS Generator/Parser & Live REST API v3
+// Google Calendar Links, .ICS & Live API v3
 // ==========================================================================
 
-/**
- * Generates a 1-click Google Calendar Template URL for any task
- */
 function buildGoogleCalendarTemplateUrl(task) {
-  const title = encodeURIComponent(`[AsanaFlow] ${task.title}`);
+  const title = encodeURIComponent(task.title || 'Asana Task');
   const proj = getProjectById(task.projectId);
   const subtaskLines =
     task.subtasks && task.subtasks.length
       ? '\n\nSubtasks:\n' + task.subtasks.map((s) => `${s.done ? '☑' : '☐'} ${s.title}`).join('\n')
       : '';
   const details = encodeURIComponent(
-    `Project: ${proj.icon} ${proj.name}\nPriority: ${task.priority.toUpperCase()}\n\n${
+    `Project: ${proj.name}${task.priority ? ` | Priority: ${task.priority}` : ''}\n\n${
       task.description || ''
     }${subtaskLines}`
   );
@@ -281,11 +310,9 @@ function buildGoogleCalendarTemplateUrl(task) {
     const startObj = new Date(y, m - 1, d, hh || 9, mm || 0, 0);
     const durationMins = parseInt(task.duration || '60', 10) || 60;
     const endObj = new Date(startObj.getTime() + durationMins * 60000);
-
     const toGcalUtc = (dt) => dt.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     datesParam = `${toGcalUtc(startObj)}/${toGcalUtc(endObj)}`;
   } else {
-    // All-day event (end date is exclusive in Google Calendar)
     const [y, m, d] = dateBase.split('-').map(Number);
     const nextDay = new Date(y, m - 1, d + 1);
     const cleanNext = toLocalDateString(nextDay).replace(/-/g, '');
@@ -295,18 +322,14 @@ function buildGoogleCalendarTemplateUrl(task) {
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${datesParam}&details=${details}`;
 }
 
-/**
- * Build RFC 5545 .ics file content for one or more tasks
- */
 function generateIcsContent(tasksList) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//AsanaFlow//GitHub Pages Task Hub//EN',
+    'PRODID:-//Asana//GitHub Pages Task Hub//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH'
   ];
-
   const nowStamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
   tasksList.forEach((task) => {
@@ -314,7 +337,7 @@ function generateIcsContent(tasksList) {
     const cleanDate = task.dueDate.replace(/-/g, '');
     const proj = getProjectById(task.projectId);
     const summary = escapeIcsText(`${task.completed ? '[DONE] ' : ''}${task.title} (${proj.name})`);
-    const desc = escapeIcsText(task.description || `Priority: ${task.priority}`);
+    const desc = escapeIcsText(task.description || '');
 
     lines.push('BEGIN:VEVENT');
     lines.push(`UID:${task.id}@asanaflow.github.io`);
@@ -365,9 +388,6 @@ function downloadFile(filename, content, mimeType = 'text/plain;charset=utf-8') 
   URL.revokeObjectURL(url);
 }
 
-/**
- * Parse imported .ics file into external calendar events
- */
 function parseIcsFileContent(icsText) {
   const unfolded = icsText.replace(/\r?\n[ \t]/g, '');
   const rawEvents = unfolded.split('BEGIN:VEVENT').slice(1);
@@ -401,9 +421,7 @@ function parseIcsFileContent(icsText) {
       const d = dtStartRaw.slice(6, 8);
       let timeStr = '';
       if (dtStartRaw.includes('T') && dtStartRaw.length >= 13) {
-        const hh = dtStartRaw.slice(9, 11);
-        const mm = dtStartRaw.slice(11, 13);
-        timeStr = `${hh}:${mm}`;
+        timeStr = `${dtStartRaw.slice(9, 11)}:${dtStartRaw.slice(11, 13)}`;
       }
       parsedEvents.push({
         id: uid,
@@ -419,33 +437,18 @@ function parseIcsFileContent(icsText) {
   return parsedEvents;
 }
 
-// ==========================================================================
-// Live Google Calendar API v3 (OAuth 2.0 via Google Identity Services)
-// ==========================================================================
-
 function updateGcalStatusUi() {
-  const dot = document.getElementById('gcalStatusDot');
-  const title = document.getElementById('gcalStatusText');
-  const sub = document.getElementById('gcalStatusSub');
+  const isConnected = Boolean(googleAccessToken);
+  const topbarText = document.getElementById('gcalTopbarStatusText');
   const modalBadge = document.getElementById('modalGcalApiBadge');
   const importedCountEl = document.getElementById('importedEventsCountLabel');
 
-  if (importedCountEl) {
-    importedCountEl.textContent = String(state.externalEvents.length);
-  }
-
-  const isConnected = Boolean(googleAccessToken);
-  if (dot) dot.classList.toggle('connected', isConnected);
-  if (title) {
-    title.textContent = isConnected ? 'Google Calendar Connected' : 'Google Calendar';
-  }
-  if (sub) {
-    sub.textContent = isConnected
-      ? `Live 2-way sync active (${state.externalEvents.length} events loaded)`
-      : `1-Click & .ics ready (${state.externalEvents.length} events) • Connect API for 2-way sync`;
+  if (importedCountEl) importedCountEl.textContent = String(state.externalEvents.length);
+  if (topbarText) {
+    topbarText.textContent = isConnected ? 'GCal Connected' : 'Sync Google Calendar';
   }
   if (modalBadge) {
-    modalBadge.textContent = isConnected ? 'Connected (Live OAuth)' : 'Not Connected';
+    modalBadge.textContent = isConnected ? 'Connected' : 'Disconnected';
     modalBadge.className = `badge-pill ${isConnected ? 'badge-ready' : ''}`;
   }
 }
@@ -453,38 +456,29 @@ function updateGcalStatusUi() {
 function connectGoogleCalendarOAuth() {
   const clientId = (state.settings.gcalClientId || '').trim();
   if (!clientId) {
-    showToast('Please paste your Google OAuth 2.0 Client ID first.');
-    const modal = document.getElementById('gcalModal');
-    if (modal && !modal.open) modal.showModal();
+    showToast('Enter your Google OAuth Client ID to connect live API sync.');
+    document.getElementById('gcalModal')?.showModal();
     return;
   }
 
-  if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
-    showToast('Google Identity Services script is still loading. Check your internet connection.');
+  if (!window.google?.accounts?.oauth2) {
+    showToast('Google Identity script still loading.');
     return;
   }
 
-  try {
-    googleTokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
-      callback: async (tokenResponse) => {
-        if (tokenResponse && tokenResponse.access_token) {
-          googleAccessToken = tokenResponse.access_token;
-          updateGcalStatusUi();
-          showToast('✅ Connected to Google Calendar! Fetching upcoming events...');
-          await fetchGoogleCalendarEvents();
-        } else {
-          showToast('Google authorization did not return an access token.');
-        }
+  googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly',
+    callback: async (tokenResponse) => {
+      if (tokenResponse?.access_token) {
+        googleAccessToken = tokenResponse.access_token;
+        updateGcalStatusUi();
+        showToast('Connected to Google Calendar!');
+        await fetchGoogleCalendarEvents();
       }
-    });
-
-    googleTokenClient.requestAccessToken({ prompt: 'consent' });
-  } catch (err) {
-    console.error('Google OAuth Init Error:', err);
-    showToast(`OAuth error: ${err.message}`);
-  }
+    }
+  });
+  googleTokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 async function fetchGoogleCalendarEvents() {
@@ -492,7 +486,6 @@ async function fetchGoogleCalendarEvents() {
     connectGoogleCalendarOAuth();
     return;
   }
-
   const calId = encodeURIComponent(state.settings.gcalCalendarId || 'primary');
   const timeMin = new Date(Date.now() - 14 * 86400000).toISOString();
   const timeMax = new Date(Date.now() + 60 * 86400000).toISOString();
@@ -501,17 +494,13 @@ async function fetchGoogleCalendarEvents() {
   )}&timeMax=${encodeURIComponent(timeMax)}&maxResults=200`;
 
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bearer ${googleAccessToken}` }
-    });
-    if (!res.ok) {
-      throw new Error(`Google Calendar API returned ${res.status}`);
-    }
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${googleAccessToken}` } });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     const apiEvents = (data.items || [])
       .filter((item) => item.status !== 'cancelled')
       .map((item) => {
-        const startRaw = (item.start && (item.start.dateTime || item.start.date)) || '';
+        const startRaw = item.start?.dateTime || item.start?.date || '';
         const datePart = startRaw.slice(0, 10);
         let timePart = '';
         if (startRaw.includes('T')) {
@@ -528,37 +517,31 @@ async function fetchGoogleCalendarEvents() {
         };
       });
 
-    // Keep any manually imported .ics events and replace previous gcal_api events
     const icsEvents = state.externalEvents.filter((e) => e.source === 'ics');
     state.externalEvents = [...icsEvents, ...apiEvents];
     saveState();
-    updateGcalStatusUi();
     renderAll();
-    showToast(`📅 Synced ${apiEvents.length} events from Google Calendar!`);
+    showToast(`Synced ${apiEvents.length} Google Calendar events`);
   } catch (err) {
-    console.error('Error fetching Google Calendar events:', err);
-    showToast(`Failed to fetch events: ${err.message}`);
+    showToast(`Calendar fetch error: ${err.message}`);
   }
 }
 
 async function pushTaskToGoogleCalendarApi(task) {
   if (!task.dueDate) {
-    showToast('Please set a Due Date on this task before syncing to Google Calendar.');
+    showToast('Set a Due date on this task first.');
     return false;
   }
-
   if (!googleAccessToken) {
-    // Fallback: if API isn't connected, open the 1-click Google Calendar template URL
     window.open(buildGoogleCalendarTemplateUrl(task), '_blank', 'noopener');
-    showToast('Opened task in Google Calendar tab (connect OAuth Client ID for background API sync).');
     return false;
   }
 
   const calId = encodeURIComponent(state.settings.gcalCalendarId || 'primary');
   const proj = getProjectById(task.projectId);
-  const eventPayload = {
-    summary: `[AsanaFlow] ${task.title}`,
-    description: `Project: ${proj.name} | Priority: ${task.priority}\n\n${task.description || ''}`
+  const payload = {
+    summary: task.title,
+    description: `Project: ${proj.name}\n\n${task.description || ''}`
   };
 
   if (task.dueTime && task.duration !== 'allday') {
@@ -567,13 +550,13 @@ async function pushTaskToGoogleCalendarApi(task) {
     const startObj = new Date(y, m - 1, d, hh || 9, mm || 0, 0);
     const durationMins = parseInt(task.duration || '60', 10) || 60;
     const endObj = new Date(startObj.getTime() + durationMins * 60000);
-    eventPayload.start = { dateTime: startObj.toISOString() };
-    eventPayload.end = { dateTime: endObj.toISOString() };
+    payload.start = { dateTime: startObj.toISOString() };
+    payload.end = { dateTime: endObj.toISOString() };
   } else {
     const [y, m, d] = task.dueDate.split('-').map(Number);
     const nextDayStr = toLocalDateString(new Date(y, m - 1, d + 1));
-    eventPayload.start = { date: task.dueDate };
-    eventPayload.end = { date: nextDayStr };
+    payload.start = { date: task.dueDate };
+    payload.end = { date: nextDayStr };
   }
 
   try {
@@ -588,22 +571,17 @@ async function pushTaskToGoogleCalendarApi(task) {
         Authorization: `Bearer ${googleAccessToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(eventPayload)
+      body: JSON.stringify(payload)
     });
-
-    if (!res.ok) {
-      throw new Error(`Calendar API returned ${res.status}`);
-    }
-
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const created = await res.json();
     task.gcalEventId = created.id;
     saveState();
     renderAll();
-    showToast(`✅ Synced "${task.title}" to Google Calendar!`);
+    showToast(`Synced "${task.title}" to Google Calendar`);
     return true;
   } catch (err) {
-    console.error('Failed to push task to Google Calendar:', err);
-    showToast(`Calendar API sync error: ${err.message}`);
+    showToast(`Sync failed: ${err.message}`);
     return false;
   }
 }
@@ -611,79 +589,38 @@ async function pushTaskToGoogleCalendarApi(task) {
 async function pushAllTasksToGoogleCalendar() {
   const tasksWithDates = state.tasks.filter((t) => t.dueDate && !t.completed);
   if (tasksWithDates.length === 0) {
-    showToast('No active tasks with due dates to push.');
+    showToast('No tasks with due dates to push.');
     return;
   }
   if (!googleAccessToken) {
-    showToast('Connect your Google OAuth Client ID first, or use "Export All Tasks (.ics)".');
-    const modal = document.getElementById('gcalModal');
-    if (modal && !modal.open) modal.showModal();
+    document.getElementById('gcalModal')?.showModal();
     return;
   }
-  let count = 0;
   for (const t of tasksWithDates) {
-    const ok = await pushTaskToGoogleCalendarApi(t);
-    if (ok) count++;
+    await pushTaskToGoogleCalendarApi(t);
   }
   await fetchGoogleCalendarEvents();
-  showToast(`🎉 Pushed ${count} task deadlines to Google Calendar!`);
 }
 
 // ==========================================================================
-// Task CRUD & Recurrence Logic
+// Task & Section CRUD
 // ==========================================================================
 
-function toggleTaskCompletion(taskId) {
-  const task = state.tasks.find((t) => t.id === taskId);
-  if (!task) return;
+function createNewTask(taskData = {}) {
+  const projId =
+    taskData.projectId ||
+    (selectedProjectId !== 'all' ? selectedProjectId : state.projects[0]?.id || 'proj_todo');
+  const proj = getProjectById(projId);
+  const defaultSecId = (proj.sections && proj.sections[0] && proj.sections[0].id) || 'sec_default';
 
-  task.completed = !task.completed;
-  if (task.completed) {
-    task.status = 'done';
-    // If recurring, automatically spawn the next occurrence!
-    if (task.recurrence && task.recurrence !== 'none' && task.dueDate) {
-      const [y, m, d] = task.dueDate.split('-').map(Number);
-      const base = new Date(y, m - 1, d);
-      if (task.recurrence === 'daily') base.setDate(base.getDate() + 1);
-      else if (task.recurrence === 'weekly') base.setDate(base.getDate() + 7);
-      else if (task.recurrence === 'biweekly') base.setDate(base.getDate() + 14);
-      else if (task.recurrence === 'monthly') base.setMonth(base.getMonth() + 1);
-
-      const nextTask = {
-        ...JSON.parse(JSON.stringify(task)),
-        id: generateId('task'),
-        dueDate: toLocalDateString(base),
-        completed: false,
-        status: 'todo',
-        section: 'upcoming',
-        gcalEventId: null,
-        subtasks: (task.subtasks || []).map((s) => ({ ...s, done: false })),
-        createdAt: Date.now()
-      };
-      state.tasks.unshift(nextTask);
-      showToast(`🔁 Completed & scheduled next ${task.recurrence} task for ${formatHumanDate(nextTask.dueDate)}`);
-    } else {
-      showToast(`✅ Completed "${task.title}"`);
-    }
-  } else {
-    if (task.status === 'done') task.status = 'todo';
-  }
-
-  saveState();
-  renderAll();
-  if (activeDrawerTaskId === taskId) {
-    openTaskDrawer(taskId);
-  }
-}
-
-function createNewTask(taskData) {
   const newTask = {
     id: generateId('task'),
-    title: taskData.title.trim(),
-    projectId: taskData.projectId || (state.projects[0] && state.projects[0].id) || 'proj_personal',
-    section: taskData.section || 'upcoming',
+    title: (taskData.title ?? '').trim(),
+    projectId: projId,
+    sectionId: taskData.sectionId || defaultSecId,
     status: taskData.status || 'todo',
-    priority: taskData.priority || 'medium',
+    priority: taskData.priority ?? '',
+    assignedToMe: Boolean(taskData.assignedToMe),
     dueDate: taskData.dueDate || '',
     dueTime: taskData.dueTime || '',
     duration: taskData.duration || '60',
@@ -701,170 +638,607 @@ function createNewTask(taskData) {
     createdAt: Date.now()
   };
 
-  state.tasks.unshift(newTask);
+  state.tasks.push(newTask);
+  saveState();
+  return newTask;
+}
+
+function toggleTaskCompletion(taskId) {
+  const task = state.tasks.find((t) => t.id === taskId);
+  if (!task) return;
+  task.completed = !task.completed;
+  task.status = task.completed ? 'done' : 'todo';
+
+  if (task.completed && task.recurrence && task.recurrence !== 'none' && task.dueDate) {
+    const [y, m, d] = task.dueDate.split('-').map(Number);
+    const base = new Date(y, m - 1, d);
+    if (task.recurrence === 'daily') base.setDate(base.getDate() + 1);
+    else if (task.recurrence === 'weekly') base.setDate(base.getDate() + 7);
+    else if (task.recurrence === 'biweekly') base.setDate(base.getDate() + 14);
+    else if (task.recurrence === 'monthly') base.setMonth(base.getMonth() + 1);
+
+    state.tasks.push({
+      ...JSON.parse(JSON.stringify(task)),
+      id: generateId('task'),
+      dueDate: toLocalDateString(base),
+      completed: false,
+      status: 'todo',
+      gcalEventId: null,
+      subtasks: (task.subtasks || []).map((s) => ({ ...s, done: false })),
+      createdAt: Date.now()
+    });
+  }
+
   saveState();
   renderAll();
-  showToast(`Added task "${newTask.title}"`);
-  return newTask;
+  if (activeDrawerTaskId === taskId) openTaskDrawer(taskId);
 }
 
 function deleteTask(taskId) {
   const idx = state.tasks.findIndex((t) => t.id === taskId);
   if (idx === -1) return;
-  const removed = state.tasks.splice(idx, 1)[0];
-  if (activeDrawerTaskId === taskId) {
-    closeTaskDrawer();
-  }
+  state.tasks.splice(idx, 1);
+  if (activeDrawerTaskId === taskId) closeTaskDrawer();
   saveState();
   renderAll();
-  showToast(`🗑️ Deleted "${removed.title}"`);
 }
-
-// ==========================================================================
-// Rendering Engine (Sidebar, Overview, List, Kanban Board, Calendar, Drawer)
-// ==========================================================================
 
 function deleteProject(projectId) {
   if (state.projects.length <= 1) {
-    showToast('You must keep at least one project.');
+    showToast('Keep at least one project.');
     return;
   }
   const idx = state.projects.findIndex((p) => p.id === projectId);
   if (idx === -1) return;
-  const removed = state.projects.splice(idx, 1)[0];
+  state.projects.splice(idx, 1);
   state.tasks = state.tasks.filter((t) => t.projectId !== projectId);
   if (selectedProjectId === projectId) {
     selectedProjectId = state.projects[0].id;
   }
   saveState();
   renderAll();
-  showToast(`🗑️ Deleted project "${removed.name}" and its tasks`);
 }
+
+function addSectionToCurrentProject() {
+  const proj = getProjectById(selectedProjectId);
+  if (!proj) return;
+  proj.sections = proj.sections || [{ id: 'sec_default', name: '' }];
+  const newSec = {
+    id: generateId('sec'),
+    name: 'Untitled section'
+  };
+  proj.sections.push(newSec);
+  saveState();
+  renderListView();
+  // Focus the new section title input
+  setTimeout(() => {
+    const inputs = document.querySelectorAll('.section-title-input');
+    const last = inputs[inputs.length - 1];
+    if (last) {
+      last.focus();
+      last.select();
+    }
+  }, 20);
+}
+
+// ==========================================================================
+// Rendering Engine
+// ==========================================================================
 
 function renderAll() {
   renderTopbarAndSidebar();
-  renderOverviewView();
   renderListView();
   renderKanbanBoardView();
   renderCalendarView();
+  renderOverviewView();
   updateGcalStatusUi();
 }
 
 function renderTopbarAndSidebar() {
-  const now = new Date();
-  const dateDisplay = document.getElementById('currentDateDisplay');
-  if (dateDisplay) {
-    dateDisplay.textContent = now.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  const proj = getProjectById(selectedProjectId);
+  const titleEl = document.getElementById('currentViewTitle');
+  const badgeEl = document.getElementById('currentProjectBadge');
+
+  if (titleEl && proj) {
+    titleEl.textContent = selectedProjectId === 'all' ? 'My tasks' : proj.name;
+  }
+  if (badgeEl && proj) {
+    badgeEl.style.backgroundColor = proj.color || '#f06a9a';
   }
 
-  // Pending & Due Soon badges (scoped to filtered project if selected)
-  const todayStr = toLocalDateString(now);
-  const allActiveTasks = state.tasks.filter((t) => !t.completed);
-  const scopedActiveTasks =
-    selectedProjectId === 'all'
-      ? allActiveTasks
-      : allActiveTasks.filter((t) => t.projectId === selectedProjectId);
-  const dueOrOverdue = scopedActiveTasks.filter((t) => t.dueDate && t.dueDate <= todayStr);
+  // Counts
+  const todayStr = toLocalDateString(new Date());
+  const allActive = state.tasks.filter((t) => !t.completed && t.title.trim() !== '');
+  const dueSoon = allActive.filter((t) => t.dueDate && t.dueDate <= todayStr);
 
-  const badgePending = document.getElementById('badgePendingCount');
-  if (badgePending) badgePending.textContent = String(scopedActiveTasks.length);
+  const pendingBadge = document.getElementById('badgePendingCount');
+  if (pendingBadge) pendingBadge.textContent = String(allActive.length);
 
-  const badgeUrgent = document.getElementById('badgeDueSoonCount');
-  if (badgeUrgent) {
-    badgeUrgent.hidden = dueOrOverdue.length === 0;
-    badgeUrgent.textContent = String(dueOrOverdue.length);
+  const urgentBadge = document.getElementById('badgeDueSoonCount');
+  if (urgentBadge) {
+    urgentBadge.hidden = dueSoon.length === 0;
+    urgentBadge.textContent = String(dueSoon.length);
   }
 
-  // Active Project Filter Pill
-  const filterPill = document.getElementById('activeProjectPill');
-  const filterPillName = document.getElementById('activeProjectPillName');
-  if (filterPill && filterPillName) {
-    if (selectedProjectId === 'all') {
-      filterPill.hidden = true;
-    } else {
-      const proj = getProjectById(selectedProjectId);
-      filterPill.hidden = false;
-      filterPillName.textContent = `${proj.icon} ${proj.name}`;
-    }
-  }
-
-  // Sidebar Project List
-  const projContainer = document.getElementById('sidebarProjectList');
-  if (projContainer) {
-    projContainer.innerHTML = '';
-
-    const allBtn = document.createElement('button');
-    allBtn.type = 'button';
-    allBtn.className = `project-nav-item ${selectedProjectId === 'all' ? 'active' : ''}`;
-    allBtn.innerHTML = `
-      <span class="project-color-dot" style="background-color: #94a3b8"></span>
-      <span>All Projects</span>
-      <span class="project-count">${allActiveTasks.length}</span>
-    `;
-    allBtn.addEventListener('click', () => {
-      selectedProjectId = 'all';
-      renderAll();
-    });
-    projContainer.appendChild(allBtn);
-
-    state.projects.forEach((proj) => {
-      const count = allActiveTasks.filter((t) => t.projectId === proj.id).length;
-      const item = document.createElement('div');
-      item.className = `project-nav-item ${selectedProjectId === proj.id ? 'active' : ''}`;
-      item.innerHTML = `
-        <span class="project-color-dot" style="background-color: ${proj.color}"></span>
-        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(proj.icon)} ${escapeHtml(proj.name)}</span>
-        <span class="project-count">${count}</span>
+  // Sidebar Projects List
+  const listEl = document.getElementById('sidebarProjectList');
+  if (listEl) {
+    listEl.innerHTML = '';
+    state.projects.forEach((p) => {
+      const row = document.createElement('div');
+      row.className = `sidebar-proj-row ${selectedProjectId === p.id ? 'active' : ''}`;
+      row.innerHTML = `
+        <span class="sidebar-proj-icon" style="background-color: ${p.color || '#f06a9a'}">
+          ${SVG_PROJECT_LIST_ICON}
+        </span>
+        <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.name)}</span>
         ${
           state.projects.length > 1
-            ? `<button type="button" class="proj-del-btn" title="Delete project" aria-label="Delete project ${escapeHtml(proj.name)}" style="border:none;background:transparent;color:#9ca3af;cursor:pointer;padding:0 4px;font-size:0.75rem;">✕</button>`
+            ? `<button type="button" class="sidebar-proj-del" title="Delete project" aria-label="Delete project">✕</button>`
             : ''
         }
       `;
-      item.addEventListener('click', (e) => {
-        if (e.target.closest('.proj-del-btn')) return;
-        selectedProjectId = proj.id;
+      row.addEventListener('click', (e) => {
+        if (e.target.closest('.sidebar-proj-del')) return;
+        selectedProjectId = p.id;
         renderAll();
       });
-      const delBtn = item.querySelector('.proj-del-btn');
-      if (delBtn) {
-        delBtn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          deleteProject(proj.id);
-        });
-      }
-      projContainer.appendChild(item);
+      row.querySelector('.sidebar-proj-del')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteProject(p.id);
+      });
+      listEl.appendChild(row);
     });
   }
 
-  // Populate Project <select> dropdowns across forms and sync with selectedProjectId
-  const selectIds = ['quickTaskProject', 'drawerTaskProject', 'modalTaskProject'];
-  selectIds.forEach((id) => {
+  // Populate project dropdowns
+  ['drawerTaskProject', 'modalTaskProject'].forEach((id) => {
     const sel = document.getElementById(id);
     if (!sel) return;
-    const prevValue = sel.value;
     sel.innerHTML = state.projects
-      .map((p) => `<option value="${p.id}">${escapeHtml(p.icon)} ${escapeHtml(p.name)}</option>`)
+      .map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`)
       .join('');
-    if (selectedProjectId !== 'all' && id !== 'drawerTaskProject' && state.projects.some((p) => p.id === selectedProjectId)) {
-      sel.value = selectedProjectId;
-    } else if (prevValue && state.projects.some((p) => p.id === prevValue)) {
-      sel.value = prevValue;
+    if (selectedProjectId !== 'all') sel.value = selectedProjectId;
+  });
+}
+
+// ==========================================================================
+// VIEW 1: EXACT ASANA SPREADSHEET LIST VIEW
+// ==========================================================================
+
+function renderListView() {
+  const tbody = document.getElementById('asanaSpreadsheetBody');
+  if (!tbody) return;
+
+  const proj = getProjectById(selectedProjectId);
+  const sections =
+    selectedProjectId === 'all'
+      ? [{ id: 'sec_default', name: '' }]
+      : proj.sections || [{ id: 'sec_default', name: '' }];
+
+  const filteredTasks = getFilteredTasks();
+  tbody.innerHTML = '';
+
+  sections.forEach((sec, secIndex) => {
+    // Render section header if it has a name or is not the first default unnamed section
+    if (sec.name || secIndex > 0) {
+      const secTr = document.createElement('tr');
+      secTr.className = 'asana-section-tr';
+      secTr.innerHTML = `
+        <td colspan="5">
+          <div class="section-header-flex">
+            <span>▾</span>
+            <input type="text" class="section-title-input" value="${escapeHtml(sec.name || 'Untitled section')}" aria-label="Section name">
+          </div>
+        </td>
+      `;
+      const input = secTr.querySelector('.section-title-input');
+      input.addEventListener('change', () => {
+        sec.name = input.value.trim() || 'Untitled section';
+        saveState();
+      });
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+          e.preventDefault();
+          input.blur();
+        }
+      });
+      tbody.appendChild(secTr);
+    }
+
+    const secTasks = filteredTasks.filter((t) => {
+      if (selectedProjectId === 'all') return true;
+      const targetSec = t.sectionId || sections[0].id;
+      return targetSec === sec.id;
+    });
+
+    secTasks.forEach((task, idx) => {
+      tbody.appendChild(createSpreadsheetTaskRow(task, PLACEHOLDER_HINTS[idx] || 'Write a task name'));
+    });
+
+    // If this is the first section and there are fewer than 3 tasks, render the exact 3 Asana placeholder rows!
+    if (secIndex === 0 && secTasks.length < 3 && searchQuery.trim() === '' && statusFilter === 'all' && priorityFilter === 'all') {
+      for (let i = secTasks.length; i < 3; i++) {
+        tbody.appendChild(createPlaceholderSpreadsheetRow(PLACEHOLDER_HINTS[i], sec.id));
+      }
     }
   });
 }
 
+function createSpreadsheetTaskRow(task, placeholderText = 'Write a task name') {
+  const tr = document.createElement('tr');
+  tr.className = `asana-grid-row ${task.completed ? 'completed' : ''}`;
+  tr.dataset.taskId = task.id;
+
+  const deadline = getDeadlineStatus(task.dueDate, task.completed);
+  const prioClass = task.priority ? `prio-${task.priority}` : '';
+
+  tr.innerHTML = `
+    <td>
+      <div class="cell-name-inner">
+        <button type="button" class="asana-row-check ${task.completed ? 'checked' : ''}" aria-label="Mark complete">✓</button>
+        <input
+          type="text"
+          class="asana-row-input"
+          value="${escapeHtml(task.title)}"
+          placeholder="${escapeHtml(placeholderText)}"
+          aria-label="Task name"
+        >
+        <button type="button" class="row-open-drawer-btn" title="Open task details &amp; subtasks">Details ›</button>
+      </div>
+    </td>
+    <td>
+      <button type="button" class="dashed-circle-btn assignee-toggle-btn" title="Click to assign/unassign to you">
+        ${
+          task.assignedToMe
+            ? `<span class="gh-avatar gh-avatar-xs">GH</span><span style="color:var(--text-main);font-size:12.5px;">Guillermo</span>`
+            : SVG_ASSIGNEE_DASHED
+        }
+      </button>
+    </td>
+    <td>
+      <div class="cell-date-wrapper" title="Click to set due date">
+        ${
+          task.dueDate
+            ? `<span class="date-text-pill ${deadline.className}">${escapeHtml(deadline.label)}${
+                task.dueTime ? ' ' + escapeHtml(task.dueTime) : ''
+              }</span>`
+            : `<span class="dashed-circle-btn">${SVG_CALENDAR_DASHED}</span>`
+        }
+        <input type="date" class="cell-date-native" value="${escapeHtml(task.dueDate || '')}" aria-label="Due date">
+      </div>
+    </td>
+    <td>
+      <select class="cell-priority-select ${prioClass}" aria-label="Priority">
+        <option value="" ${!task.priority ? 'selected' : ''}></option>
+        <option value="low" ${task.priority === 'low' ? 'selected' : ''}>Low</option>
+        <option value="medium" ${task.priority === 'medium' ? 'selected' : ''}>Medium</option>
+        <option value="high" ${task.priority === 'high' ? 'selected' : ''}>High</option>
+        <option value="urgent" ${task.priority === 'urgent' ? 'selected' : ''}>Urgent</option>
+      </select>
+    </td>
+    <td>
+      <div class="cell-actions-inner">
+        <a href="${buildGoogleCalendarTemplateUrl(task)}" target="_blank" rel="noopener" class="gcal-mini-link" title="Add to Google Calendar">+GCal</a>
+        <button type="button" class="row-del-btn" title="Delete row" aria-label="Delete task">✕</button>
+      </div>
+    </td>
+  `;
+
+  // 1. Checkmark toggle
+  tr.querySelector('.asana-row-check').addEventListener('click', () => {
+    toggleTaskCompletion(task.id);
+  });
+
+  // 2. Inline Title Input (saves as you type, Enter creates a new row below!)
+  const nameInput = tr.querySelector('.asana-row-input');
+  nameInput.addEventListener('input', () => {
+    task.title = nameInput.value;
+    saveState();
+    const gcalLink = tr.querySelector('.gcal-mini-link');
+    if (gcalLink) gcalLink.href = buildGoogleCalendarTemplateUrl(task);
+  });
+
+  nameInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (e.isComposing || e.keyCode === 229) return;
+      const newTask = createNewTask({ sectionId: task.sectionId });
+      renderAll();
+      focusTaskRowInput(newTask.id);
+    } else if (e.key === 'Backspace' && nameInput.value === '') {
+      e.preventDefault();
+      deleteTask(task.id);
+    }
+  });
+
+  // 3. Details Drawer Button
+  tr.querySelector('.row-open-drawer-btn').addEventListener('click', () => {
+    openTaskDrawer(task.id);
+  });
+
+  // 4. Assignee Toggle
+  tr.querySelector('.assignee-toggle-btn').addEventListener('click', () => {
+    task.assignedToMe = !task.assignedToMe;
+    saveState();
+    renderListView();
+  });
+
+  // 5. Inline Date Picker
+  const dateInput = tr.querySelector('.cell-date-native');
+  dateInput.addEventListener('click', () => {
+    if (typeof dateInput.showPicker === 'function') {
+      try {
+        dateInput.showPicker();
+      } catch {}
+    }
+  });
+  dateInput.addEventListener('change', () => {
+    task.dueDate = dateInput.value;
+    saveState();
+    renderAll();
+  });
+
+  // 6. Priority Dropdown
+  const prioSelect = tr.querySelector('.cell-priority-select');
+  prioSelect.addEventListener('change', () => {
+    task.priority = prioSelect.value;
+    saveState();
+    renderAll();
+  });
+
+  // 7. Delete Row
+  tr.querySelector('.row-del-btn').addEventListener('click', () => {
+    deleteTask(task.id);
+  });
+
+  return tr;
+}
+
+/**
+ * Renders one of the 3 ghost/placeholder rows shown in the screenshot ("e.g. Determine project goal")
+ * As soon as the user types or sets a date/priority on it, it promotes into a real saved task!
+ */
+function createPlaceholderSpreadsheetRow(placeholderText, sectionId) {
+  const tr = document.createElement('tr');
+  tr.className = 'asana-grid-row placeholder-row';
+
+  tr.innerHTML = `
+    <td>
+      <div class="cell-name-inner">
+        <span class="asana-row-check" aria-hidden="true"></span>
+        <input
+          type="text"
+          class="asana-row-input"
+          placeholder="${escapeHtml(placeholderText)}"
+          aria-label="${escapeHtml(placeholderText)}"
+        >
+      </div>
+    </td>
+    <td>
+      <button type="button" class="dashed-circle-btn" title="Assign to me">
+        ${SVG_ASSIGNEE_DASHED}
+      </button>
+    </td>
+    <td>
+      <div class="cell-date-wrapper" title="Set due date">
+        <span class="dashed-circle-btn">${SVG_CALENDAR_DASHED}</span>
+        <input type="date" class="cell-date-native" aria-label="Due date">
+      </div>
+    </td>
+    <td>
+      <select class="cell-priority-select" aria-label="Priority">
+        <option value="" selected></option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="urgent">Urgent</option>
+      </select>
+    </td>
+    <td></td>
+  `;
+
+  const input = tr.querySelector('.asana-row-input');
+  input.addEventListener('input', () => {
+    if (!input.value) return;
+    const val = input.value;
+    const newTask = createNewTask({ title: val, sectionId });
+    renderAll();
+    focusTaskRowInput(newTask.id, val.length);
+  });
+
+  tr.querySelector('.dashed-circle-btn').addEventListener('click', () => {
+    const newTask = createNewTask({ title: '', assignedToMe: true, sectionId });
+    renderAll();
+    focusTaskRowInput(newTask.id);
+  });
+
+  const dateInput = tr.querySelector('.cell-date-native');
+  dateInput.addEventListener('click', () => {
+    if (typeof dateInput.showPicker === 'function') {
+      try {
+        dateInput.showPicker();
+      } catch {}
+    }
+  });
+  dateInput.addEventListener('change', () => {
+    if (!dateInput.value) return;
+    const newTask = createNewTask({ title: '', dueDate: dateInput.value, sectionId });
+    renderAll();
+    focusTaskRowInput(newTask.id);
+  });
+
+  const prioSelect = tr.querySelector('.cell-priority-select');
+  prioSelect.addEventListener('change', () => {
+    if (!prioSelect.value) return;
+    const newTask = createNewTask({ title: '', priority: prioSelect.value, sectionId });
+    renderAll();
+    focusTaskRowInput(newTask.id);
+  });
+
+  return tr;
+}
+
+function focusTaskRowInput(taskId, cursorPos = null) {
+  setTimeout(() => {
+    const row = document.querySelector(`tr[data-task-id="${taskId}"]`);
+    const input = row?.querySelector('.asana-row-input');
+    if (input) {
+      input.focus();
+      const pos = cursorPos !== null ? cursorPos : input.value.length;
+      input.setSelectionRange(pos, pos);
+    }
+  }, 10);
+}
+
+// ==========================================================================
+// VIEW 2: KANBAN BOARD VIEW
+// ==========================================================================
+
+function renderKanbanBoardView() {
+  const board = document.getElementById('kanbanBoard');
+  if (!board) return;
+
+  const filtered = getFilteredTasks().filter((t) => t.title.trim() !== '');
+  const columns = [
+    { status: 'todo', label: 'To do' },
+    { status: 'in_progress', label: 'Doing' },
+    { status: 'review', label: 'Review' },
+    { status: 'done', label: 'Done' }
+  ];
+
+  board.innerHTML = '';
+
+  columns.forEach((col) => {
+    const colTasks = filtered.filter((t) => t.status === col.status);
+    const colEl = document.createElement('div');
+    colEl.className = 'kanban-column';
+    colEl.innerHTML = `
+      <div class="kanban-col-header">
+        <span>${col.label}</span>
+        <span style="color:var(--text-muted)">${colTasks.length}</span>
+      </div>
+      <div class="kanban-cards-list"></div>
+      <button type="button" class="asana-add-section-btn" style="width:100%;justify-content:center;">+ Add task</button>
+    `;
+
+    colEl.addEventListener('dragover', (e) => e.preventDefault());
+    colEl.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const taskId = e.dataTransfer.getData('text/plain');
+      const task = state.tasks.find((t) => t.id === taskId);
+      if (task) {
+        task.status = col.status;
+        task.completed = col.status === 'done';
+        saveState();
+        renderAll();
+      }
+    });
+
+    const listEl = colEl.querySelector('.kanban-cards-list');
+    colTasks.forEach((task) => {
+      const card = document.createElement('div');
+      card.className = 'kanban-card';
+      card.draggable = true;
+      const deadline = getDeadlineStatus(task.dueDate, task.completed);
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button type="button" class="asana-row-check ${task.completed ? 'checked' : ''}">✓</button>
+          <p class="kanban-card-title">${escapeHtml(task.title)}</p>
+        </div>
+        <div class="kanban-card-footer">
+          <span>${task.dueDate ? escapeHtml(deadline.label) : ''}</span>
+          <a href="${buildGoogleCalendarTemplateUrl(task)}" target="_blank" rel="noopener" class="gcal-mini-link">+GCal</a>
+        </div>
+      `;
+      card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', task.id));
+      card.querySelector('.asana-row-check').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleTaskCompletion(task.id);
+      });
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('a')) return;
+        openTaskDrawer(task.id);
+      });
+      listEl.appendChild(card);
+    });
+
+    colEl.querySelector('.asana-add-section-btn').addEventListener('click', () => {
+      openCreateTaskModal({ status: col.status });
+    });
+
+    board.appendChild(colEl);
+  });
+}
+
+// ==========================================================================
+// VIEW 3: CALENDAR VIEW
+// ==========================================================================
+
+function renderCalendarView() {
+  const grid = document.getElementById('calendarGrid');
+  const heading = document.getElementById('calendarHeading');
+  if (!grid || !heading) return;
+
+  const year = calendarCursorDate.getFullYear();
+  const month = calendarCursorDate.getMonth();
+  heading.textContent = calendarCursorDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const firstDay = new Date(year, month, 1);
+  const startOffset = (firstDay.getDay() + 6) % 7;
+  const gridStart = new Date(year, month, 1 - startOffset);
+  const todayStr = toLocalDateString(new Date());
+  const filtered = getFilteredTasks().filter((t) => t.title.trim() !== '');
+
+  grid.innerHTML = '';
+
+  for (let i = 0; i < 42; i++) {
+    const cellDate = new Date(gridStart);
+    cellDate.setDate(gridStart.getDate() + i);
+    const dateStr = toLocalDateString(cellDate);
+    const isOther = cellDate.getMonth() !== month;
+    const isToday = dateStr === todayStr;
+
+    const cell = document.createElement('div');
+    cell.className = `cal-day-cell ${isOther ? 'other-month' : ''} ${isToday ? 'is-today' : ''}`;
+    cell.innerHTML = `<div class="cal-day-num">${cellDate.getDate()}</div>`;
+
+    filtered
+      .filter((t) => t.dueDate === dateStr)
+      .forEach((task) => {
+        const chip = document.createElement('div');
+        chip.className = 'cal-event-chip';
+        chip.textContent = `${task.dueTime ? task.dueTime + ' ' : ''}${task.title}`;
+        chip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          openTaskDrawer(task.id);
+        });
+        cell.appendChild(chip);
+      });
+
+    state.externalEvents
+      .filter((ev) => ev.date === dateStr)
+      .forEach((ev) => {
+        const chip = document.createElement('div');
+        chip.className = 'cal-event-chip';
+        chip.style.borderLeftColor = '#16a34a';
+        chip.textContent = `📅 ${ev.time ? ev.time + ' ' : ''}${ev.title}`;
+        cell.appendChild(chip);
+      });
+
+    cell.addEventListener('click', () => openCreateTaskModal({ dueDate: dateStr }));
+    grid.appendChild(cell);
+  }
+}
+
+// ==========================================================================
+// VIEW 4: OVERVIEW VIEW
+// ==========================================================================
+
 function renderOverviewView() {
   const todayStr = toLocalDateString(new Date());
   const nextWeekStr = addDays(new Date(), 7);
-
-  // Respect active project and topbar filters on Home & Overview!
-  const allTasks = getFilteredTasks();
+  const allTasks = getFilteredTasks().filter((t) => t.title.trim() !== '');
   const active = allTasks.filter((t) => !t.completed);
   const overdue = active.filter((t) => t.dueDate && t.dueDate < todayStr);
   const dueToday = active.filter((t) => t.dueDate === todayStr);
@@ -876,518 +1250,45 @@ function renderOverviewView() {
   setText('statDueTodayCount', dueToday.length);
   setText('statWeekCount', dueWeek.length);
   setText('statCompletedCount', completed.length);
-  setText('statCompletionRate', `${rate}% of ${allTasks.length} total tasks`);
+  setText('statCompletionRate', `${rate}% completed`);
 
-  // Left Card: Urgent & Due Soon Tasks
-  const urgentList = document.getElementById('overviewUrgentList');
-  if (urgentList) {
-    const sorted = [...active]
-      .sort((a, b) => {
-        const da = a.dueDate || '9999-12-31';
-        const db = b.dueDate || '9999-12-31';
-        if (da !== db) return da.localeCompare(db);
-        const pOrder = { urgent: 0, high: 1, medium: 2, low: 3 };
-        return (pOrder[a.priority] ?? 2) - (pOrder[b.priority] ?? 2);
-      })
-      .slice(0, 6);
-
-    if (sorted.length === 0) {
-      urgentList.innerHTML = `<p class="toolbar-hint">🎉 All caught up! Use the quick bar above to add a task.</p>`;
+  const urgentEl = document.getElementById('overviewUrgentList');
+  if (urgentEl) {
+    urgentEl.innerHTML = '';
+    if (active.length === 0) {
+      urgentEl.innerHTML = `<div style="color:var(--text-muted)">No active tasks yet.</div>`;
     } else {
-      urgentList.innerHTML = '';
-      sorted.forEach((task) => {
-        urgentList.appendChild(createCompactTaskRow(task));
-      });
-    }
-  }
-
-  // Right Card: Merged Google Calendar & Deadlines Feed
-  const agendaList = document.getElementById('overviewAgendaList');
-  if (agendaList) {
-    const combined = [
-      ...active
-        .filter((t) => t.dueDate)
-        .map((t) => ({
-          type: 'task',
-          id: t.id,
-          title: t.title,
-          date: t.dueDate,
-          time: t.dueTime || '',
-          taskRef: t
-        })),
-      ...state.externalEvents.map((ev) => ({
-        type: 'gcal',
-        id: ev.id,
-        title: ev.title,
-        date: ev.date,
-        time: ev.time || '',
-        htmlLink: ev.htmlLink || ''
-      }))
-    ]
-      .filter((item) => item.date >= addDays(new Date(), -1))
-      .sort((a, b) => `${a.date}T${a.time || '23:59'}`.localeCompare(`${b.date}T${b.time || '23:59'}`))
-      .slice(0, 7);
-
-    if (combined.length === 0) {
-      agendaList.innerHTML = `<p class="toolbar-hint">No upcoming deadlines or Google Calendar events yet.</p>`;
-    } else {
-      agendaList.innerHTML = '';
-      combined.forEach((item) => {
-        const row = document.createElement('div');
-        row.className = 'agenda-item';
-        const isTask = item.type === 'task';
-        row.innerHTML = `
-          <div>
-            <div style="font-weight: 600; font-size: 0.88rem;">
-              ${isTask ? '📌' : '📅'} ${escapeHtml(item.title)}
-            </div>
-            <div style="font-size: 0.76rem; color: var(--text-secondary);">
-              ${formatHumanDate(item.date)} ${item.time ? `• ${escapeHtml(item.time)}` : ''} • ${
-          isTask ? 'Asana Task' : 'Google Calendar'
-        }
-            </div>
-          </div>
-          <div>
-            ${
-              isTask
-                ? `<a href="${buildGoogleCalendarTemplateUrl(
-                    item.taskRef
-                  )}" target="_blank" rel="noopener" class="gcal-mini-link" title="Add to Google Calendar">+GCal</a>`
-                : `<span class="badge-pill" style="background:rgba(26,115,232,0.14);color:var(--gcal-blue)">Synced</span>`
-            }
-          </div>
+      active.slice(0, 6).forEach((t) => {
+        const item = document.createElement('div');
+        item.className = 'agenda-item';
+        item.innerHTML = `
+          <span>${escapeHtml(t.title)}</span>
+          <a href="${buildGoogleCalendarTemplateUrl(t)}" target="_blank" rel="noopener" class="gcal-mini-link">+GCal</a>
         `;
-        row.addEventListener('click', (e) => {
-          if (e.target.closest('a')) return;
-          if (isTask) openTaskDrawer(item.id);
-          else if (item.htmlLink) window.open(item.htmlLink, '_blank', 'noopener');
+        item.addEventListener('click', (e) => {
+          if (!e.target.closest('a')) openTaskDrawer(t.id);
         });
-        agendaList.appendChild(row);
+        urgentEl.appendChild(item);
       });
     }
   }
 
-  // Projects Progress Grid
-  const projGrid = document.getElementById('overviewProjectsGrid');
-  if (projGrid) {
-    projGrid.innerHTML = '';
-    state.projects.forEach((proj) => {
-      const projTasks = state.tasks.filter((t) => t.projectId === proj.id);
-      const doneCount = projTasks.filter((t) => t.completed).length;
-      const pct = projTasks.length ? Math.round((doneCount / projTasks.length) * 100) : 0;
+  const agendaEl = document.getElementById('overviewAgendaList');
+  if (agendaEl) {
+    agendaEl.innerHTML = '';
+    const merged = [
+      ...active.filter((t) => t.dueDate).map((t) => ({ title: t.title, date: t.dueDate, isTask: true, id: t.id })),
+      ...state.externalEvents.map((e) => ({ title: e.title, date: e.date, isTask: false }))
+    ].slice(0, 6);
 
-      const card = document.createElement('div');
-      card.className = 'project-summary-card';
-      card.innerHTML = `
-        <div class="project-summary-top">
-          <span class="project-color-dot" style="background-color: ${proj.color}"></span>
-          <span>${escapeHtml(proj.icon)} ${escapeHtml(proj.name)}</span>
-        </div>
-        <div class="project-summary-stats">
-          <span>${doneCount} / ${projTasks.length} completed</span>
-          <span>${pct}%</span>
-        </div>
-        <progress max="100" value="${pct}">${pct}%</progress>
-      `;
-      card.addEventListener('click', () => {
-        selectedProjectId = proj.id;
-        switchView('list');
-      });
-      projGrid.appendChild(card);
-    });
-  }
-}
-
-function createCompactTaskRow(task) {
-  const row = document.createElement('div');
-  row.className = 'agenda-item';
-  const deadline = getDeadlineStatus(task.dueDate, task.completed);
-  const proj = getProjectById(task.projectId);
-
-  row.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-      <button type="button" class="task-check-btn ${task.completed ? 'checked' : ''}" aria-label="Toggle task complete">✓</button>
-      <div style="min-width:0;">
-        <div style="font-weight:600;font-size:0.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
-          ${escapeHtml(task.title)}
-        </div>
-        <div style="display:flex;gap:6px;align-items:center;margin-top:3px;flex-wrap:wrap;">
-          <span class="badge-pill badge-project">${escapeHtml(proj.icon)} ${escapeHtml(proj.name)}</span>
-          <span class="badge-pill badge-priority-${task.priority}">${task.priority}</span>
-          ${
-            task.dueDate
-              ? `<span class="badge-pill badge-due ${deadline.className}">📅 ${deadline.label}${
-                  task.dueTime ? ' ' + task.dueTime : ''
-                }</span>`
-              : ''
-          }
-        </div>
-      </div>
-    </div>
-    <a href="${buildGoogleCalendarTemplateUrl(task)}" target="_blank" rel="noopener" class="gcal-mini-link" title="Open in Google Calendar">+GCal</a>
-  `;
-
-  const checkBtn = row.querySelector('.task-check-btn');
-  checkBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleTaskCompletion(task.id);
-  });
-
-  row.addEventListener('click', (e) => {
-    if (e.target.closest('a')) return;
-    openTaskDrawer(task.id);
-  });
-
-  return row;
-}
-
-// ==========================================================================
-// Asana My Tasks List View
-// ==========================================================================
-
-function renderListView() {
-  const container = document.getElementById('asanaListContainer');
-  if (!container) return;
-
-  const filtered = getFilteredTasks();
-  const groupBy = state.settings.listGroupBy || 'section';
-
-  let groups = [];
-  if (groupBy === 'section') {
-    groups = [
-      { key: 'today', title: '📌 Today', filter: (t) => !t.completed && t.section === 'today' },
-      { key: 'upcoming', title: '🗓️ Upcoming', filter: (t) => !t.completed && t.section === 'upcoming' },
-      { key: 'later', title: '⏳ Later', filter: (t) => !t.completed && t.section === 'later' },
-      { key: 'completed', title: '✅ Completed', filter: (t) => t.completed }
-    ];
-  } else if (groupBy === 'status') {
-    groups = [
-      { key: 'todo', title: '⚪ To Do', filter: (t) => t.status === 'todo' },
-      { key: 'in_progress', title: '🔵 In Progress', filter: (t) => t.status === 'in_progress' },
-      { key: 'review', title: '🟣 In Review', filter: (t) => t.status === 'review' },
-      { key: 'done', title: '🟢 Done', filter: (t) => t.status === 'done' }
-    ];
-  } else {
-    groups = state.projects.map((p) => ({
-      key: p.id,
-      title: `${p.icon} ${p.name}`,
-      filter: (t) => t.projectId === p.id
-    }));
-  }
-
-  container.innerHTML = '';
-
-  groups.forEach((group) => {
-    const items = filtered.filter(group.filter);
-    const isCollapsed = Boolean(state.settings.collapsedSections[group.key]);
-
-    const sectionEl = document.createElement('div');
-    sectionEl.className = 'asana-section';
-
-    const header = document.createElement('div');
-    header.className = 'asana-section-header';
-    header.innerHTML = `
-      <div class="asana-section-title">
-        <span>${isCollapsed ? '▶' : '▼'}</span>
-        <span>${escapeHtml(group.title)}</span>
-        <span class="badge-pill badge-project">${items.length}</span>
-      </div>
-      <span class="toolbar-hint">${isCollapsed ? 'Click to expand' : 'Click to collapse'}</span>
-    `;
-    header.addEventListener('click', () => {
-      state.settings.collapsedSections[group.key] = !isCollapsed;
-      saveState();
-      renderListView();
-    });
-    sectionEl.appendChild(header);
-
-    if (!isCollapsed) {
-      const body = document.createElement('div');
-      if (items.length === 0) {
-        body.innerHTML = `<div style="padding:14px 16px;font-size:0.82rem;color:var(--text-muted);">No tasks in this section.</div>`;
-      } else {
-        items.forEach((task) => {
-          body.appendChild(createAsanaListRow(task));
-        });
-      }
-      sectionEl.appendChild(body);
-    }
-
-    container.appendChild(sectionEl);
-  });
-}
-
-function createAsanaListRow(task) {
-  const row = document.createElement('div');
-  row.className = `asana-task-row ${task.completed ? 'completed' : ''}`;
-
-  const proj = getProjectById(task.projectId);
-  const deadline = getDeadlineStatus(task.dueDate, task.completed);
-  const subCount = (task.subtasks || []).length;
-  const subDone = (task.subtasks || []).filter((s) => s.done).length;
-
-  row.innerHTML = `
-    <button type="button" class="task-check-btn ${task.completed ? 'checked' : ''}" aria-label="Mark task complete">✓</button>
-    <div class="task-row-main">
-      <span class="task-row-title">${escapeHtml(task.title)}</span>
-      ${
-        subCount > 0
-          ? `<span class="badge-pill badge-tag" title="Subtasks">☑️ ${subDone}/${subCount}</span>`
-          : ''
-      }
-      ${
-        task.recurrence && task.recurrence !== 'none'
-          ? `<span class="badge-pill badge-tag" title="Recurring task">🔁 ${task.recurrence}</span>`
-          : ''
-      }
-      ${(task.tags || [])
-        .map((tag) => `<span class="badge-pill badge-tag">#${escapeHtml(tag)}</span>`)
-        .join('')}
-    </div>
-    <div class="task-row-meta">
-      <span class="badge-pill badge-project">
-        <span class="project-color-dot" style="background:${proj.color}"></span>
-        ${escapeHtml(proj.name)}
-      </span>
-      <span class="badge-pill badge-priority-${task.priority}">${task.priority}</span>
-      ${
-        task.dueDate
-          ? `<span class="badge-pill badge-due ${deadline.className}">📅 ${deadline.label}${
-              task.dueTime ? ' ' + task.dueTime : ''
-            }</span>`
-          : `<span class="badge-pill badge-due">No deadline</span>`
-      }
-      <a href="${buildGoogleCalendarTemplateUrl(task)}" target="_blank" rel="noopener" class="gcal-mini-link" title="Add to Google Calendar">+GCal</a>
-    </div>
-  `;
-
-  row.querySelector('.task-check-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleTaskCompletion(task.id);
-  });
-
-  row.querySelector('.task-row-main').addEventListener('click', () => {
-    openTaskDrawer(task.id);
-  });
-
-  return row;
-}
-
-// ==========================================================================
-// Kanban Board View (With HTML5 Drag and Drop)
-// ==========================================================================
-
-function renderKanbanBoardView() {
-  const board = document.getElementById('kanbanBoard');
-  if (!board) return;
-
-  const filtered = getFilteredTasks();
-  const columns = [
-    { status: 'todo', label: '⚪ To Do' },
-    { status: 'in_progress', label: '🔵 In Progress' },
-    { status: 'review', label: '🟣 In Review' },
-    { status: 'done', label: '🟢 Done' }
-  ];
-
-  board.innerHTML = '';
-
-  columns.forEach((col) => {
-    const colTasks = filtered.filter((t) => t.status === col.status);
-    const colEl = document.createElement('div');
-    colEl.className = 'kanban-column';
-    colEl.dataset.status = col.status;
-
-    colEl.innerHTML = `
-      <div class="kanban-col-header">
-        <span>${col.label}</span>
-        <span class="badge-pill badge-project">${colTasks.length}</span>
-      </div>
-      <div class="kanban-cards-list"></div>
-      <button type="button" class="btn btn-ghost btn-xs btn-full kanban-add-btn">+ Add Card</button>
-    `;
-
-    // Drag & Drop Target Handlers
-    colEl.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      colEl.classList.add('drag-over');
-    });
-    colEl.addEventListener('dragleave', () => {
-      colEl.classList.remove('drag-over');
-    });
-    colEl.addEventListener('drop', (e) => {
-      e.preventDefault();
-      colEl.classList.remove('drag-over');
-      const draggedTaskId = e.dataTransfer.getData('text/plain');
-      const task = state.tasks.find((t) => t.id === draggedTaskId);
-      if (task && task.status !== col.status) {
-        task.status = col.status;
-        task.completed = col.status === 'done';
-        saveState();
-        renderAll();
-        showToast(`Moved "${task.title}" to ${col.label}`);
-      }
-    });
-
-    const cardsList = colEl.querySelector('.kanban-cards-list');
-    colTasks.forEach((task) => {
-      cardsList.appendChild(createKanbanCard(task));
-    });
-
-    colEl.querySelector('.kanban-add-btn').addEventListener('click', () => {
-      openCreateTaskModal({ status: col.status });
-    });
-
-    board.appendChild(colEl);
-  });
-}
-
-function createKanbanCard(task) {
-  const card = document.createElement('article');
-  card.className = `kanban-card ${task.completed ? 'completed' : ''}`;
-  card.draggable = true;
-
-  const proj = getProjectById(task.projectId);
-  const deadline = getDeadlineStatus(task.dueDate, task.completed);
-  const subCount = (task.subtasks || []).length;
-  const subDone = (task.subtasks || []).filter((s) => s.done).length;
-
-  card.innerHTML = `
-    <div class="kanban-card-top">
-      <span class="badge-pill badge-project">
-        <span class="project-color-dot" style="background:${proj.color}"></span>
-        ${escapeHtml(proj.name)}
-      </span>
-      <span class="badge-pill badge-priority-${task.priority}">${task.priority}</span>
-    </div>
-    <h3 class="kanban-card-title">${escapeHtml(task.title)}</h3>
-    ${
-      (task.tags || []).length > 0 || subCount > 0
-        ? `<div style="display:flex;gap:4px;flex-wrap:wrap;">
-            ${subCount > 0 ? `<span class="badge-pill badge-tag">☑️ ${subDone}/${subCount}</span>` : ''}
-            ${(task.tags || []).map((t) => `<span class="badge-pill badge-tag">#${escapeHtml(t)}</span>`).join('')}
-          </div>`
-        : ''
-    }
-    <div class="kanban-card-footer">
-      <div style="display:flex;align-items:center;gap:6px;">
-        <button type="button" class="task-check-btn ${task.completed ? 'checked' : ''}" aria-label="Toggle task complete">✓</button>
-        ${
-          task.dueDate
-            ? `<span class="badge-pill badge-due ${deadline.className}">${deadline.label}</span>`
-            : `<span class="toolbar-hint">No date</span>`
-        }
-      </div>
-      <a href="${buildGoogleCalendarTemplateUrl(task)}" target="_blank" rel="noopener" class="gcal-mini-link" title="Add to Google Calendar">+GCal</a>
-    </div>
-  `;
-
-  card.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/plain', task.id);
-  });
-
-  card.querySelector('.task-check-btn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleTaskCompletion(task.id);
-  });
-
-  card.addEventListener('click', (e) => {
-    if (e.target.closest('a')) return;
-    openTaskDrawer(task.id);
-  });
-
-  return card;
-}
-
-// ==========================================================================
-// Calendar & Deadlines View
-// ==========================================================================
-
-function renderCalendarView() {
-  const grid = document.getElementById('calendarGrid');
-  const heading = document.getElementById('calendarHeading');
-  const sideAgenda = document.getElementById('calendarSideAgendaList');
-  if (!grid || !heading) return;
-
-  const year = calendarCursorDate.getFullYear();
-  const month = calendarCursorDate.getMonth();
-
-  heading.textContent = calendarCursorDate.toLocaleDateString(undefined, {
-    month: 'long',
-    year: 'numeric'
-  });
-
-  const firstDayOfMonth = new Date(year, month, 1);
-  // Monday-based week (0 = Mon, 6 = Sun)
-  const startOffset = (firstDayOfMonth.getDay() + 6) % 7;
-  const gridStartDate = new Date(year, month, 1 - startOffset);
-
-  const todayStr = toLocalDateString(new Date());
-  const filteredTasks = getFilteredTasks();
-
-  grid.innerHTML = '';
-
-  for (let i = 0; i < 42; i++) {
-    const cellDate = new Date(gridStartDate);
-    cellDate.setDate(gridStartDate.getDate() + i);
-    const dateStr = toLocalDateString(cellDate);
-    const isOtherMonth = cellDate.getMonth() !== month;
-    const isToday = dateStr === todayStr;
-
-    const cell = document.createElement('div');
-    cell.className = `cal-day-cell ${isOtherMonth ? 'other-month' : ''} ${isToday ? 'is-today' : ''}`;
-    cell.innerHTML = `<div class="cal-day-num">${cellDate.getDate()}</div>`;
-
-    const dayTasks = filteredTasks.filter((t) => t.dueDate === dateStr);
-    const dayGcal = state.externalEvents.filter((ev) => ev.date === dateStr);
-
-    dayTasks.forEach((task) => {
-      const chip = document.createElement('div');
-      chip.className = `cal-event-chip chip-task ${task.completed ? 'completed' : ''}`;
-      chip.textContent = `${task.dueTime ? task.dueTime + ' ' : ''}${task.title}`;
-      chip.title = `Asana Task: ${task.title}`;
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        openTaskDrawer(task.id);
-      });
-      cell.appendChild(chip);
-    });
-
-    dayGcal.forEach((ev) => {
-      const chip = document.createElement('div');
-      chip.className = 'cal-event-chip chip-gcal';
-      chip.textContent = `📅 ${ev.time ? ev.time + ' ' : ''}${ev.title}`;
-      chip.title = `Google Calendar: ${ev.title}`;
-      chip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (ev.htmlLink) {
-          window.open(ev.htmlLink, '_blank', 'noopener');
-        } else {
-          showToast(`📅 Google Calendar Event: ${ev.title} (${ev.date})`);
-        }
-      });
-      cell.appendChild(chip);
-    });
-
-    // Clicking empty space on a day cell opens Create Task modal for that date
-    cell.addEventListener('click', () => {
-      openCreateTaskModal({ dueDate: dateStr });
-    });
-
-    grid.appendChild(cell);
-  }
-
-  // Chronological Deadlines Sidebar
-  if (sideAgenda) {
-    const upcomingTasks = filteredTasks
-      .filter((t) => t.dueDate && !t.completed)
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-
-    sideAgenda.innerHTML = '';
-    if (upcomingTasks.length === 0) {
-      sideAgenda.innerHTML = `<p class="toolbar-hint">No active deadlines scheduled.</p>`;
+    if (merged.length === 0) {
+      agendaEl.innerHTML = `<div style="color:var(--text-muted)">No scheduled deadlines or Google Calendar events.</div>`;
     } else {
-      upcomingTasks.forEach((task) => {
-        sideAgenda.appendChild(createCompactTaskRow(task));
+      merged.forEach((m) => {
+        const item = document.createElement('div');
+        item.className = 'agenda-item';
+        item.innerHTML = `<span>${m.isTask ? '📌' : '📅'} ${escapeHtml(m.title)}</span><span style="color:var(--text-muted)">${formatHumanDate(m.date)}</span>`;
+        agendaEl.appendChild(item);
       });
     }
   }
@@ -1400,18 +1301,26 @@ function renderCalendarView() {
 function openTaskDrawer(taskId) {
   const task = state.tasks.find((t) => t.id === taskId);
   if (!task) return;
-
   activeDrawerTaskId = taskId;
+
   const drawer = document.getElementById('taskDrawer');
   if (!drawer) return;
-
   drawer.hidden = false;
+
+  const proj = getProjectById(task.projectId);
+  const secSelect = document.getElementById('drawerTaskSection');
+  if (secSelect && proj) {
+    secSelect.innerHTML = (proj.sections || [{ id: 'sec_default', name: 'General' }])
+      .map((s) => `<option value="${s.id}">${escapeHtml(s.name || 'General')}</option>`)
+      .join('');
+    secSelect.value = task.sectionId || (proj.sections[0] && proj.sections[0].id) || 'sec_default';
+  }
+
   document.getElementById('drawerTaskId').value = task.id;
   document.getElementById('drawerTaskTitle').value = task.title;
   document.getElementById('drawerTaskProject').value = task.projectId;
-  document.getElementById('drawerTaskSection').value = task.section || 'upcoming';
   document.getElementById('drawerTaskStatus').value = task.status || 'todo';
-  document.getElementById('drawerTaskPriority').value = task.priority || 'medium';
+  document.getElementById('drawerTaskPriority').value = task.priority || '';
   document.getElementById('drawerTaskDueDate').value = task.dueDate || '';
   document.getElementById('drawerTaskDueTime').value = task.dueTime || '';
   document.getElementById('drawerTaskDuration').value = task.duration || '60';
@@ -1419,18 +1328,11 @@ function openTaskDrawer(taskId) {
   document.getElementById('drawerTaskTags').value = (task.tags || []).join(', ');
   document.getElementById('drawerTaskDescription').value = task.description || '';
 
-  const completedCheck = document.getElementById('drawerTaskCompleted');
-  const completedLabel = document.getElementById('drawerCompleteLabelText');
-  if (completedCheck && completedLabel) {
-    completedCheck.checked = Boolean(task.completed);
-    completedLabel.textContent = task.completed ? '✅ Completed' : 'Mark Complete';
-  }
-
-  const syncPill = document.getElementById('drawerGcalSyncPill');
-  if (syncPill) {
-    syncPill.textContent = task.gcalEventId
-      ? '✅ Linked to Google Calendar API event'
-      : 'Use +GCal Link or API Sync to add to calendar';
+  const check = document.getElementById('drawerTaskCompleted');
+  const label = document.getElementById('drawerCompleteLabelText');
+  if (check && label) {
+    check.checked = Boolean(task.completed);
+    label.textContent = task.completed ? '✓ Completed' : '✓ Mark complete';
   }
 
   renderDrawerSubtasks(task);
@@ -1458,43 +1360,40 @@ function renderDrawerSubtasks(task) {
   listEl.innerHTML = '';
   subs.forEach((sub) => {
     const li = document.createElement('li');
-    li.className = `subtask-item ${sub.done ? 'done' : ''}`;
+    li.className = 'subtask-item';
     li.innerHTML = `
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
         <input type="checkbox" ${sub.done ? 'checked' : ''}>
-        <span>${escapeHtml(sub.title)}</span>
+        <span style="${sub.done ? 'text-decoration:line-through;color:var(--text-muted)' : ''}">${escapeHtml(sub.title)}</span>
       </label>
-      <button type="button" class="icon-btn-sm" title="Remove subtask" aria-label="Remove subtask">✕</button>
+      <button type="button" class="row-del-btn" aria-label="Remove subtask">✕</button>
     `;
     li.querySelector('input').addEventListener('change', () => {
       sub.done = !sub.done;
       saveState();
       renderDrawerSubtasks(task);
-      renderAll();
     });
     li.querySelector('button').addEventListener('click', () => {
       task.subtasks = task.subtasks.filter((s) => s.id !== sub.id);
       saveState();
       renderDrawerSubtasks(task);
-      renderAll();
     });
     listEl.appendChild(li);
   });
 }
 
 // ==========================================================================
-// GitHub Gist Cloud Sync (Optional Cross-Device Sync for GitHub Pages)
+// GitHub Gist Cloud Sync
 // ==========================================================================
 
 async function pushToGitHubGist() {
   const token = (state.settings.gistToken || '').trim();
   if (!token) {
-    showToast('Please enter a GitHub Personal Access Token (with gist scope).');
+    showToast('Enter a GitHub Token (gist scope).');
     return;
   }
-
   const payload = {
-    description: 'AsanaFlow Workspace Cloud Sync Backup',
+    description: 'Asana Workspace Sync',
     public: false,
     files: {
       'asanaflow_workspace.json': {
@@ -1511,7 +1410,6 @@ async function pushToGitHubGist() {
       }
     }
   };
-
   try {
     const gistId = (state.settings.gistId || '').trim();
     const url = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
@@ -1524,17 +1422,15 @@ async function pushToGitHubGist() {
       },
       body: JSON.stringify(payload)
     });
-
-    if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     state.settings.gistId = data.id;
-    const gistIdInput = document.getElementById('gistIdInput');
-    if (gistIdInput) gistIdInput.value = data.id;
+    const idInput = document.getElementById('gistIdInput');
+    if (idInput) idInput.value = data.id;
     saveState();
-    showToast(`☁️ Synced workspace to GitHub Gist (${data.id.slice(0, 8)}...)!`);
+    showToast('Synced to GitHub Gist!');
   } catch (err) {
-    console.error('Gist push error:', err);
-    showToast(`Gist sync failed: ${err.message}`);
+    showToast(`Gist error: ${err.message}`);
   }
 }
 
@@ -1542,60 +1438,47 @@ async function pullFromGitHubGist() {
   const token = (state.settings.gistToken || '').trim();
   const gistId = (state.settings.gistId || '').trim();
   if (!gistId) {
-    showToast('Please enter your Gist ID to pull from.');
+    showToast('Enter your Gist ID.');
     return;
   }
-
   try {
     const headers = { Accept: 'application/vnd.github+json' };
     if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`https://api.github.com/gists/${gistId}`, { headers });
-    if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    const fileObj = data.files && data.files['asanaflow_workspace.json'];
-    if (!fileObj || !fileObj.content) throw new Error('asanaflow_workspace.json not found in Gist');
-
-    const parsed = JSON.parse(fileObj.content);
+    const content = data.files?.['asanaflow_workspace.json']?.content;
+    if (!content) throw new Error('No workspace file in Gist');
+    const parsed = JSON.parse(content);
     if (Array.isArray(parsed.projects)) state.projects = parsed.projects;
     if (Array.isArray(parsed.tasks)) state.tasks = parsed.tasks;
     if (Array.isArray(parsed.externalEvents)) state.externalEvents = parsed.externalEvents;
     saveState();
     renderAll();
-    showToast('✅ Pulled latest tasks & projects from GitHub Gist!');
+    showToast('Pulled latest tasks from Gist!');
   } catch (err) {
-    console.error('Gist pull error:', err);
-    showToast(`Gist pull failed: ${err.message}`);
+    showToast(`Pull error: ${err.message}`);
   }
 }
 
 // ==========================================================================
-// Navigation, Modals & Event Listeners
+// View Switching & Event Wiring
 // ==========================================================================
 
 function switchView(viewName) {
   activeView = viewName;
-  const views = ['overview', 'list', 'board', 'calendar'];
-  const titles = {
-    overview: 'Home & Overview',
-    list: 'My Tasks (List)',
-    board: 'Kanban Board',
-    calendar: 'Calendar & Deadlines'
-  };
-
-  views.forEach((v) => {
-    const sec = document.getElementById(`view-${v}`);
-    if (sec) {
-      sec.hidden = v !== viewName;
-      sec.classList.toggle('active', v === viewName);
+  ['overview', 'list', 'board', 'calendar'].forEach((v) => {
+    const el = document.getElementById(`view-${v}`);
+    if (el) {
+      el.hidden = v !== viewName;
+      el.classList.toggle('active', v === viewName);
     }
   });
 
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.view === viewName);
+  document.querySelectorAll('.project-tab').forEach((tab) => {
+    tab.classList.toggle('active', tab.dataset.view === viewName);
   });
 
-  setText('currentViewTitle', titles[viewName] || 'Workspace');
-  document.getElementById('sidebar')?.classList.remove('open');
   renderAll();
 }
 
@@ -1603,27 +1486,21 @@ function openCreateTaskModal(defaults = {}) {
   const modal = document.getElementById('taskModal');
   if (!modal) return;
   document.getElementById('modalTaskTitleInput').value = defaults.title || '';
-  document.getElementById('modalTaskSection').value = defaults.section || 'upcoming';
-  document.getElementById('modalTaskStatus').value = defaults.status || 'todo';
-  document.getElementById('modalTaskPriority').value = defaults.priority || 'medium';
-  document.getElementById('modalTaskDueDate').value = defaults.dueDate || toLocalDateString(new Date());
+  document.getElementById('modalTaskPriority').value = defaults.priority || '';
+  document.getElementById('modalTaskDueDate').value = defaults.dueDate || '';
   document.getElementById('modalTaskDueTime').value = defaults.dueTime || '';
-  document.getElementById('modalTaskRecurrence').value = 'none';
-  document.getElementById('modalTaskTags').value = '';
   document.getElementById('modalTaskDesc').value = '';
   modal.showModal();
 }
 
-function showToast(message) {
+function showToast(msg) {
   const container = document.getElementById('toastContainer');
   if (!container) return;
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => {
-    toast.remove();
-  }, 3600);
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  container.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
 }
 
 function setText(id, val) {
@@ -1639,56 +1516,72 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-// ==========================================================================
-// Initialize App & Wire Up All Event Listeners
-// ==========================================================================
-
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme();
   setupDialogLightDismissFallbacks();
 
-  // Set default quick-add date to today
-  const quickDue = document.getElementById('quickTaskDue');
-  if (quickDue) quickDue.value = toLocalDateString(new Date());
-
-  // Populate saved Google Calendar & Gist settings
-  const gcalClientInput = document.getElementById('gcalClientIdInput');
-  const gcalCalIdInput = document.getElementById('gcalCalendarIdInput');
-  if (gcalClientInput) gcalClientInput.value = state.settings.gcalClientId || '';
-  if (gcalCalIdInput) gcalCalIdInput.value = state.settings.gcalCalendarId || 'primary';
-
-  const gistTokenInput = document.getElementById('gistTokenInput');
-  const gistIdInput = document.getElementById('gistIdInput');
-  if (gistTokenInput) gistTokenInput.value = state.settings.gistToken || '';
-  if (gistIdInput) gistIdInput.value = state.settings.gistId || '';
-
-  // Sidebar view navigation
-  document.querySelectorAll('.sidebar-nav .nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => switchView(btn.dataset.view));
+  // Toggle sidebar
+  document.getElementById('toggleSidebarBtn')?.addEventListener('click', () => {
+    document.getElementById('sidebar')?.classList.toggle('collapsed');
   });
 
-  document.querySelectorAll('[data-goto-view]').forEach((btn) => {
-    btn.addEventListener('click', () => switchView(btn.getAttribute('data-goto-view')));
+  // Topbar "+ Create" button
+  document.getElementById('globalCreateBtn')?.addEventListener('click', () => openCreateTaskModal());
+
+  // Sub-tabs (Overview | List | Board | Calendar)
+  document.querySelectorAll('.project-tab').forEach((tab) => {
+    tab.addEventListener('click', () => switchView(tab.dataset.view));
   });
 
-  // Mobile sidebar toggles
-  document.getElementById('openSidebarBtn')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.add('open');
-  });
-  document.getElementById('closeSidebarBtn')?.addEventListener('click', () => {
-    document.getElementById('sidebar')?.classList.remove('open');
-  });
-
-  // Theme toggle
-  document.getElementById('themeToggleBtn')?.addEventListener('click', cycleTheme);
-
-  // Clear project filter pill
-  document.getElementById('clearProjectFilterBtn')?.addEventListener('click', () => {
+  // Left sidebar nav items
+  document.getElementById('sideNavHome')?.addEventListener('click', () => switchView('overview'));
+  document.getElementById('sideNavInbox')?.addEventListener('click', () => switchView('calendar'));
+  document.getElementById('sideNavMyTasks')?.addEventListener('click', () => {
     selectedProjectId = 'all';
+    switchView('list');
+  });
+  document.getElementById('sideNavProjects')?.addEventListener('click', () => switchView('board'));
+  document.getElementById('sideNavPortfolios')?.addEventListener('click', () => switchView('overview'));
+
+  // Slim rail buttons
+  document.getElementById('railWorkBtn')?.addEventListener('click', () => switchView('list'));
+  document.getElementById('railCalendarBtn')?.addEventListener('click', () => switchView('calendar'));
+  document.getElementById('railGcalBtn')?.addEventListener('click', () => {
+    document.getElementById('gcalModal')?.showModal();
+  });
+  document.getElementById('railBackupBtn')?.addEventListener('click', () => {
+    document.getElementById('syncBackupModal')?.showModal();
+  });
+  document.getElementById('themeToggleBtn')?.addEventListener('click', toggleTheme);
+
+  // "+ Add task" button in sub-toolbar -> immediately adds a row to the table & focuses it!
+  document.getElementById('inlineAddTaskBtn')?.addEventListener('click', () => {
+    switchView('list');
+    const newTask = createNewTask({ title: '' });
     renderAll();
+    focusTaskRowInput(newTask.id);
   });
 
-  // Search & Filters
+  // "+ Add section" buttons
+  document.getElementById('inlineAddSectionTopBtn')?.addEventListener('click', addSectionToCurrentProject);
+  document.getElementById('bottomAddSectionBtn')?.addEventListener('click', addSectionToCurrentProject);
+
+  // Rename project by clicking title or chevron
+  const promptRenameProject = () => {
+    if (selectedProjectId === 'all') return;
+    const proj = getProjectById(selectedProjectId);
+    if (!proj) return;
+    const nextName = prompt('Rename project:', proj.name);
+    if (nextName && nextName.trim()) {
+      proj.name = nextName.trim();
+      saveState();
+      renderAll();
+    }
+  };
+  document.getElementById('currentViewTitle')?.addEventListener('click', promptRenameProject);
+  document.getElementById('renameProjectBtn')?.addEventListener('click', promptRenameProject);
+
+  // Search (Ctrl+K or /)
   const searchInput = document.getElementById('globalSearchInput');
   const searchForm = document.getElementById('searchForm');
   attachImeSafeEnterSubmit(searchInput, searchForm, false);
@@ -1701,47 +1594,30 @@ document.addEventListener('DOMContentLoaded', () => {
     renderAll();
   });
 
-  // Keyboard shortcut '/' to focus search
   document.addEventListener('keydown', (e) => {
-    if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
       e.preventDefault();
       searchInput?.focus();
     }
   });
 
-  document.getElementById('priorityFilterSelect')?.addEventListener('change', (e) => {
-    priorityFilter = e.target.value;
-    renderAll();
-  });
+  // Filter & Sort selects
   document.getElementById('statusFilterSelect')?.addEventListener('change', (e) => {
     statusFilter = e.target.value;
     renderAll();
   });
-
-  // Quick Add Task Bar (IME-safe Enter submit)
-  const quickForm = document.getElementById('quickAddTaskForm');
-  const quickTitleInput = document.getElementById('quickTaskTitle');
-  attachImeSafeEnterSubmit(quickTitleInput, quickForm, false);
-  quickForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const title = quickTitleInput.value.trim();
-    if (!title) return;
-    createNewTask({
-      title,
-      projectId: document.getElementById('quickTaskProject').value,
-      section: document.getElementById('quickTaskSection').value,
-      dueDate: document.getElementById('quickTaskDue').value,
-      dueTime: document.getElementById('quickTaskTime').value,
-      priority: document.getElementById('quickTaskPriority').value
-    });
-    quickTitleInput.value = '';
-    document.getElementById('quickTaskTime').value = '';
+  document.getElementById('priorityFilterSelect')?.addEventListener('change', (e) => {
+    priorityFilter = e.target.value;
+    renderAll();
+  });
+  document.getElementById('sortSelect')?.addEventListener('change', (e) => {
+    sortBy = e.target.value;
+    state.settings.sortBy = sortBy;
+    saveState();
+    renderAll();
   });
 
-  // Create Task Modal triggers
-  document.getElementById('sidebarCreateTaskBtn')?.addEventListener('click', () => openCreateTaskModal());
-  document.getElementById('topbarNewTaskBtn')?.addEventListener('click', () => openCreateTaskModal());
-
+  // Create Task Modal
   const modalTaskForm = document.getElementById('modalTaskForm');
   attachImeSafeEnterSubmit(document.getElementById('modalTaskTitleInput'), modalTaskForm, false);
   modalTaskForm?.addEventListener('submit', async (e) => {
@@ -1749,49 +1625,113 @@ document.addEventListener('DOMContentLoaded', () => {
     const newTask = createNewTask({
       title: document.getElementById('modalTaskTitleInput').value,
       projectId: document.getElementById('modalTaskProject').value,
-      section: document.getElementById('modalTaskSection').value,
-      status: document.getElementById('modalTaskStatus').value,
       priority: document.getElementById('modalTaskPriority').value,
       dueDate: document.getElementById('modalTaskDueDate').value,
       dueTime: document.getElementById('modalTaskDueTime').value,
-      recurrence: document.getElementById('modalTaskRecurrence').value,
-      tags: document.getElementById('modalTaskTags').value,
       description: document.getElementById('modalTaskDesc').value
     });
     document.getElementById('taskModal')?.close();
+    renderAll();
     if (document.getElementById('modalTaskAutoGcal')?.checked && newTask.dueDate) {
       await pushTaskToGoogleCalendarApi(newTask);
     }
   });
 
-  // List View Group-By Segmented Control & Expand/Collapse
-  document.querySelectorAll('[data-groupby]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      state.settings.listGroupBy = btn.getAttribute('data-groupby');
-      document.querySelectorAll('[data-groupby]').forEach((b) => b.classList.toggle('active', b === btn));
-      saveState();
-      renderListView();
-    });
-  });
+  // New Project Modal
+  const openProjModal = () => document.getElementById('projectModal')?.showModal();
+  document.getElementById('openNewProjectModalBtn')?.addEventListener('click', openProjModal);
+  document.getElementById('tabAddProjectBtn')?.addEventListener('click', openProjModal);
 
-  document.getElementById('expandAllSectionsBtn')?.addEventListener('click', () => {
-    state.settings.collapsedSections = {};
+  const projForm = document.getElementById('projectModalForm');
+  attachImeSafeEnterSubmit(document.getElementById('newProjectName'), projForm, false);
+  projForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = document.getElementById('newProjectName').value.trim();
+    if (!name) return;
+    const color = document.getElementById('newProjectColor').value || '#f06a9a';
+    const newProj = {
+      id: generateId('proj'),
+      name,
+      color,
+      sections: [{ id: 'sec_default', name: '' }]
+    };
+    state.projects.push(newProj);
+    selectedProjectId = newProj.id;
     saveState();
-    renderListView();
+    document.getElementById('newProjectName').value = '';
+    document.getElementById('projectModal')?.close();
+    renderAll();
   });
 
-  document.getElementById('collapseAllSectionsBtn')?.addEventListener('click', () => {
-    ['today', 'upcoming', 'later', 'completed', 'todo', 'in_progress', 'review', 'done'].forEach((k) => {
-      state.settings.collapsedSections[k] = true;
-    });
-    state.projects.forEach((p) => {
-      state.settings.collapsedSections[p.id] = true;
-    });
+  // Drawer form & subtasks
+  document.getElementById('closeDrawerBtn')?.addEventListener('click', closeTaskDrawer);
+  document.getElementById('drawerTaskCompleted')?.addEventListener('change', () => {
+    if (activeDrawerTaskId) toggleTaskCompletion(activeDrawerTaskId);
+  });
+
+  const drawerForm = document.getElementById('drawerTaskForm');
+  attachImeSafeEnterSubmit(document.getElementById('drawerTaskTitle'), drawerForm, false);
+  drawerForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
+    if (!task) return;
+    task.title = document.getElementById('drawerTaskTitle').value.trim();
+    task.projectId = document.getElementById('drawerTaskProject').value;
+    task.sectionId = document.getElementById('drawerTaskSection').value;
+    task.status = document.getElementById('drawerTaskStatus').value;
+    task.completed = task.status === 'done';
+    task.priority = document.getElementById('drawerTaskPriority').value;
+    task.dueDate = document.getElementById('drawerTaskDueDate').value;
+    task.dueTime = document.getElementById('drawerTaskDueTime').value;
+    task.duration = document.getElementById('drawerTaskDuration').value;
+    task.recurrence = document.getElementById('drawerTaskRecurrence').value;
+    task.tags = document
+      .getElementById('drawerTaskTags')
+      .value.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    task.description = document.getElementById('drawerTaskDescription').value;
     saveState();
-    renderListView();
+    renderAll();
+    showToast('Saved task');
   });
 
-  // Calendar Month Navigation
+  const addSubtaskForm = document.getElementById('addSubtaskForm');
+  const newSubtaskInput = document.getElementById('newSubtaskInput');
+  attachImeSafeEnterSubmit(newSubtaskInput, addSubtaskForm, false);
+  addSubtaskForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
+    const title = newSubtaskInput.value.trim();
+    if (!task || !title) return;
+    task.subtasks = task.subtasks || [];
+    task.subtasks.push({ id: generateId('sub'), title, done: false });
+    newSubtaskInput.value = '';
+    saveState();
+    renderDrawerSubtasks(task);
+  });
+
+  document.getElementById('drawerAddToGcalLinkBtn')?.addEventListener('click', () => {
+    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
+    if (task) window.open(buildGoogleCalendarTemplateUrl(task), '_blank', 'noopener');
+  });
+  document.getElementById('drawerPushGcalApiBtn')?.addEventListener('click', async () => {
+    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
+    if (task) await pushTaskToGoogleCalendarApi(task);
+  });
+  document.getElementById('drawerDownloadIcsBtn')?.addEventListener('click', () => {
+    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
+    if (task && task.dueDate) {
+      downloadFile(`${task.title || 'task'}.ics`, generateIcsContent([task]), 'text/calendar');
+    } else {
+      showToast('Set a Due date first to export .ics');
+    }
+  });
+  document.getElementById('drawerDeleteTaskBtn')?.addEventListener('click', () => {
+    if (activeDrawerTaskId) deleteTask(activeDrawerTaskId);
+  });
+
+  // Calendar controls
   document.getElementById('calPrevMonthBtn')?.addEventListener('click', () => {
     calendarCursorDate.setMonth(calendarCursorDate.getMonth() - 1);
     renderCalendarView();
@@ -1809,128 +1749,25 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('calPushAllToGcalBtn')?.addEventListener('click', pushAllTasksToGoogleCalendar);
 
-  // Task Detail Drawer Form & Actions
-  document.getElementById('closeDrawerBtn')?.addEventListener('click', closeTaskDrawer);
-
-  document.getElementById('drawerTaskCompleted')?.addEventListener('change', () => {
-    if (activeDrawerTaskId) toggleTaskCompletion(activeDrawerTaskId);
-  });
-
-  const drawerForm = document.getElementById('drawerTaskForm');
-  attachImeSafeEnterSubmit(document.getElementById('drawerTaskTitle'), drawerForm, false);
-  drawerForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
-    if (!task) return;
-    task.title = document.getElementById('drawerTaskTitle').value.trim() || task.title;
-    task.projectId = document.getElementById('drawerTaskProject').value;
-    task.section = document.getElementById('drawerTaskSection').value;
-    task.status = document.getElementById('drawerTaskStatus').value;
-    task.completed = task.status === 'done';
-    task.priority = document.getElementById('drawerTaskPriority').value;
-    task.dueDate = document.getElementById('drawerTaskDueDate').value;
-    task.dueTime = document.getElementById('drawerTaskDueTime').value;
-    task.duration = document.getElementById('drawerTaskDuration').value;
-    task.recurrence = document.getElementById('drawerTaskRecurrence').value;
-    task.tags = document
-      .getElementById('drawerTaskTags')
-      .value.split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    task.description = document.getElementById('drawerTaskDescription').value;
-
-    saveState();
-    renderAll();
-    openTaskDrawer(task.id);
-    showToast('Saved task changes');
-  });
-
-  // Subtask form inside drawer (IME-safe Enter submit)
-  const addSubtaskForm = document.getElementById('addSubtaskForm');
-  const newSubtaskInput = document.getElementById('newSubtaskInput');
-  attachImeSafeEnterSubmit(newSubtaskInput, addSubtaskForm, false);
-  addSubtaskForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
-    const title = newSubtaskInput.value.trim();
-    if (!task || !title) return;
-    task.subtasks = task.subtasks || [];
-    task.subtasks.push({ id: generateId('sub'), title, done: false });
-    newSubtaskInput.value = '';
-    saveState();
-    renderDrawerSubtasks(task);
-    renderAll();
-  });
-
-  document.getElementById('drawerAddToGcalLinkBtn')?.addEventListener('click', () => {
-    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
-    if (task) window.open(buildGoogleCalendarTemplateUrl(task), '_blank', 'noopener');
-  });
-
-  document.getElementById('drawerPushGcalApiBtn')?.addEventListener('click', async () => {
-    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
-    if (task) await pushTaskToGoogleCalendarApi(task);
-  });
-
-  document.getElementById('drawerDownloadIcsBtn')?.addEventListener('click', () => {
-    const task = state.tasks.find((t) => t.id === activeDrawerTaskId);
-    if (!task) return;
-    if (!task.dueDate) {
-      showToast('Set a Due Date first to export an .ics calendar event.');
-      return;
-    }
-    const content = generateIcsContent([task]);
-    downloadFile(`${task.title.slice(0, 30).replace(/[^a-z0-9]/gi, '_')}.ics`, content, 'text/calendar');
-  });
-
-  document.getElementById('drawerDeleteTaskBtn')?.addEventListener('click', () => {
-    if (activeDrawerTaskId) deleteTask(activeDrawerTaskId);
-  });
-
-  // New Project Modal
-  const openProjModal = () => document.getElementById('projectModal')?.showModal();
-  document.getElementById('openNewProjectModalBtn')?.addEventListener('click', openProjModal);
-  document.getElementById('overviewNewProjectBtn')?.addEventListener('click', openProjModal);
-
-  const projForm = document.getElementById('projectModalForm');
-  attachImeSafeEnterSubmit(document.getElementById('newProjectName'), projForm, false);
-  projForm?.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const name = document.getElementById('newProjectName').value.trim();
-    if (!name) return;
-    const icon = document.getElementById('newProjectIcon').value.trim() || '📁';
-    const color = document.getElementById('newProjectColor').value || '#f06a6a';
-    const newProj = { id: generateId('proj'), name, icon, color };
-    state.projects.push(newProj);
-    selectedProjectId = newProj.id;
-    saveState();
-    document.getElementById('newProjectName').value = '';
-    document.getElementById('projectModal')?.close();
-    renderAll();
-    showToast(`Created and switched to project "${icon} ${name}"`);
-  });
-
-  // Google Calendar Modal & .ICS Import/Export
-  const openGcalModal = () => document.getElementById('gcalModal')?.showModal();
-  document.getElementById('openGcalModalBtn')?.addEventListener('click', openGcalModal);
-  document.getElementById('topbarSyncGcalBtn')?.addEventListener('click', openGcalModal);
-  document.getElementById('overviewConnectGcalBtn')?.addEventListener('click', openGcalModal);
+  // Google Calendar Modal & .ics
+  const openGcal = () => document.getElementById('gcalModal')?.showModal();
+  document.getElementById('openGcalModalBtn')?.addEventListener('click', openGcal);
+  document.getElementById('topbarSyncGcalBtn')?.addEventListener('click', openGcal);
+  document.getElementById('toolbarOptionsGcalBtn')?.addEventListener('click', openGcal);
 
   const exportAllIcs = () => {
-    const withDates = state.tasks.filter((t) => t.dueDate);
+    const withDates = state.tasks.filter((t) => t.dueDate && t.title.trim() !== '');
     if (withDates.length === 0) {
-      showToast('Add a due date to at least one task to export an .ics file.');
+      showToast('Add a due date to at least one task to export .ics');
       return;
     }
-    const content = generateIcsContent(withDates);
-    downloadFile('asanaflow_deadlines.ics', content, 'text/calendar');
-    showToast(`⬇️ Exported ${withDates.length} tasks to asanaflow_deadlines.ics`);
+    downloadFile('asana_deadlines.ics', generateIcsContent(withDates), 'text/calendar');
   };
   document.getElementById('exportAllIcsBtn')?.addEventListener('click', exportAllIcs);
   document.getElementById('modalExportIcsBtn')?.addEventListener('click', exportAllIcs);
 
   document.getElementById('icsFileInput')?.addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
@@ -1938,7 +1775,7 @@ document.addEventListener('DOMContentLoaded', () => {
       state.externalEvents = [...state.externalEvents, ...parsed];
       saveState();
       renderAll();
-      showToast(`📥 Imported ${parsed.length} events from ${file.name}!`);
+      showToast(`Imported ${parsed.length} calendar events`);
     };
     reader.readAsText(file);
   });
@@ -1947,7 +1784,6 @@ document.addEventListener('DOMContentLoaded', () => {
     state.externalEvents = [];
     saveState();
     renderAll();
-    showToast('Cleared imported calendar events.');
   });
 
   document.getElementById('gcalConfigForm')?.addEventListener('submit', (e) => {
@@ -1963,54 +1799,40 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('disconnectGoogleApiBtn')?.addEventListener('click', () => {
     googleAccessToken = null;
     updateGcalStatusUi();
-    showToast('Disconnected Google Calendar session.');
   });
 
-  // Backup, JSON Export/Import & GitHub Gist Modal
+  // Backup & Gist Modal
   document.getElementById('openSyncBackupModalBtn')?.addEventListener('click', () => {
     document.getElementById('syncBackupModal')?.showModal();
   });
-
   document.getElementById('exportJsonBtn')?.addEventListener('click', () => {
-    downloadFile('asanaflow_backup.json', JSON.stringify(state, null, 2), 'application/json');
-    showToast('⬇️ Downloaded asanaflow_backup.json');
+    downloadFile('asana_backup.json', JSON.stringify(state, null, 2), 'application/json');
   });
-
   document.getElementById('importJsonInput')?.addEventListener('change', (e) => {
-    const file = e.target.files && e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
         const parsed = JSON.parse(String(reader.result || '{}'));
-        if (Array.isArray(parsed.tasks) && Array.isArray(parsed.projects)) {
+        if (Array.isArray(parsed.projects)) {
           state = { ...createDefaultState(), ...parsed };
           saveState();
           renderAll();
-          showToast('✅ Restored workspace from backup JSON!');
-        } else {
-          showToast('Invalid backup JSON file format.');
+          showToast('Restored backup');
         }
       } catch (err) {
-        showToast(`Failed to parse JSON: ${err.message}`);
+        showToast('Invalid JSON file');
       }
     };
     reader.readAsText(file);
   });
-
-  document.getElementById('resetDemoDataBtn')?.addEventListener('click', () => {
-    state = createDefaultState();
-    saveState();
-    renderAll();
-    showToast('🔄 Reset workspace with sample tasks.');
-  });
-
   document.getElementById('clearAllTasksBtn')?.addEventListener('click', () => {
     state.tasks = [];
     state.externalEvents = [];
     saveState();
     renderAll();
-    showToast('🗑️ Cleared all tasks and events.');
+    showToast('Cleared all tasks');
   });
 
   document.getElementById('gistSyncForm')?.addEventListener('submit', async (e) => {
@@ -2020,7 +1842,6 @@ document.addEventListener('DOMContentLoaded', () => {
     saveState();
     await pushToGitHubGist();
   });
-
   document.getElementById('gistPullBtn')?.addEventListener('click', async () => {
     state.settings.gistToken = document.getElementById('gistTokenInput').value.trim();
     state.settings.gistId = document.getElementById('gistIdInput').value.trim();
@@ -2028,6 +1849,5 @@ document.addEventListener('DOMContentLoaded', () => {
     await pullFromGitHubGist();
   });
 
-  // Initial Render
   renderAll();
 });

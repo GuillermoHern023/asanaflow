@@ -1,413 +1,396 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- MANDATORY: Declare support for both light and dark themes to prevent FOUC -->
+  <!-- MANDATORY: Declare support for both light and dark themes -->
   <meta name="color-scheme" content="light dark">
-  <title>AsanaFlow — Personal Work, Deadlines &amp; Google Calendar Hub</title>
-  <meta name="description" content="Asana-inspired personal task manager, Kanban board, deadline tracker, and Google Calendar workspace built for GitHub Pages.">
+  <title>Asana</title>
+  <meta name="description" content="Personal Asana workspace with spreadsheet List view, Kanban Board, Calendar & Google Calendar sync.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='26' r='18' fill='%23f06a6a'/><circle cx='25' cy='70' r='18' fill='%23f06a6a'/><circle cx='75' cy='70' r='18' fill='%23f06a6a'/></svg>">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
   <!-- Google Identity Services for optional 2-way client-side Google Calendar API sync on GitHub Pages -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
-  <div class="app-shell">
-    <!-- Left Sidebar (Asana Navigation) -->
-    <aside class="sidebar" id="sidebar" aria-label="Main Navigation">
-      <div class="sidebar-header">
-        <div class="brand-logo">
-          <svg class="asana-dots" width="24" height="24" viewBox="0 0 100 100" aria-hidden="true">
-            <circle cx="50" cy="24" r="19" fill="currentColor" />
-            <circle cx="23" cy="72" r="19" fill="currentColor" />
-            <circle cx="77" cy="72" r="19" fill="currentColor" />
+  <!-- TOP GLOBAL DARK BAR (Exact Asana 48px Header) -->
+  <header class="asana-global-topbar">
+    <div class="global-topbar-left">
+      <button type="button" class="topbar-icon-btn" id="toggleSidebarBtn" aria-label="Toggle sidebar">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <path d="M2 4h12M2 8h12M2 12h12" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button type="button" class="asana-create-pill" id="globalCreateBtn">
+        <span class="create-plus-circle" aria-hidden="true">+</span>
+        <span>Create</span>
+      </button>
+    </div>
+
+    <div class="global-topbar-center">
+      <form id="searchForm" class="asana-global-search" role="search">
+        <label for="globalSearchInput" class="visually-hidden">Search tasks</label>
+        <svg class="search-svg" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+          <circle cx="7" cy="7" r="5"/>
+          <path d="M11 11l3.5 3.5" stroke-linecap="round"/>
+        </svg>
+        <input
+          type="search"
+          id="globalSearchInput"
+          placeholder="Search"
+          autocomplete="off"
+        >
+        <span class="search-kbd-group" aria-hidden="true">
+          <kbd>Ctrl</kbd><kbd>K</kbd>
+        </span>
+        <button type="submit" class="visually-hidden">Search</button>
+      </form>
+    </div>
+
+    <div class="global-topbar-right">
+      <button type="button" class="asana-dash-pill" id="openGcalModalBtn" title="Connect or sync with Google Calendar">
+        <svg width="14" height="14" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="26" r="19" fill="#f06a6a" />
+          <circle cx="24" cy="72" r="19" fill="#f06a6a" />
+          <circle cx="76" cy="72" r="19" fill="#f06a6a" />
+        </svg>
+        <span id="gcalTopbarStatusText">Sync Google Calendar</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN BODY BELOW GLOBAL TOPBAR -->
+  <div class="asana-body-layout">
+    <!-- FAR-LEFT SLIM ICON RAIL (Exact Asana 60px dark rail) -->
+    <nav class="asana-slim-rail" aria-label="Primary rail">
+      <div class="rail-top">
+        <button type="button" class="rail-item active" id="railWorkBtn" title="Work">
+          <span class="rail-icon-box">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <circle cx="4.5" cy="4.5" r="2.2"/>
+              <circle cx="11.5" cy="4.5" r="2.2"/>
+              <path d="M2 13c0-1.8 1.2-3 2.8-3h6.4c1.6 0 2.8 1.2 2.8 3v1H2v-1z"/>
+            </svg>
+          </span>
+          <span class="rail-label">Work</span>
+        </button>
+
+        <button type="button" class="rail-item" id="railCalendarBtn" title="Calendar &amp; Deadlines">
+          <span class="rail-icon-box">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <rect x="2" y="3" width="12" height="11" rx="2"/>
+              <path d="M2 6.5h12M5 1.5v3M11 1.5v3" stroke-linecap="round"/>
+            </svg>
+          </span>
+          <span class="rail-label">Calendar</span>
+        </button>
+
+        <button type="button" class="rail-item" id="railGcalBtn" title="Google Calendar Sync">
+          <span class="rail-icon-box">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M8 3v5l3 2" stroke-linecap="round"/>
+              <circle cx="8" cy="8" r="6"/>
+            </svg>
+          </span>
+          <span class="rail-label">GCal</span>
+        </button>
+
+        <button type="button" class="rail-item" id="railBackupBtn" title="Backup &amp; Cloud Sync">
+          <span class="rail-icon-box">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+              <path d="M4.5 12.5h7a3 3 0 0 0 .5-5.95A4.5 4.5 0 0 0 3.2 5.5 3 3 0 0 0 4.5 12.5z"/>
+            </svg>
+          </span>
+          <span class="rail-label">Backup</span>
+        </button>
+      </div>
+
+      <div class="rail-bottom">
+        <button type="button" class="rail-help-btn" id="themeToggleBtn" title="Toggle Light / Dark theme" aria-label="Toggle Light or Dark theme">
+          ?
+        </button>
+        <div class="gh-avatar" title="Guillermo">GH</div>
+      </div>
+    </nav>
+
+    <!-- INNER DARK SIDEBAR (220px) -->
+    <aside class="asana-sidebar" id="sidebar" aria-label="Workspace navigation">
+      <div class="sidebar-work-heading">Work</div>
+
+      <div class="sidebar-menu-group">
+        <button type="button" class="sidebar-row-btn" data-nav="overview" id="sideNavHome">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M2.5 7L8 2.5 13.5 7v6.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V7z"/>
           </svg>
-          <span class="brand-name">AsanaFlow</span>
-        </div>
-        <button type="button" class="icon-btn mobile-only" id="closeSidebarBtn" aria-label="Close navigation menu">
-          ✕
+          <span>Home</span>
+        </button>
+        <button type="button" class="sidebar-row-btn" data-nav="calendar" id="sideNavInbox">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M8 2.5a4 4 0 0 1 4 4v3l1.5 2H2.5L4 9.5v-3a4 4 0 0 1 4-4z"/>
+            <path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/>
+          </svg>
+          <span>Inbox &amp; Deadlines</span>
+          <span class="sidebar-count-pill" id="badgeDueSoonCount" hidden>0</span>
         </button>
       </div>
 
-      <div class="sidebar-quick-create">
-        <button type="button" class="btn btn-primary btn-full" id="sidebarCreateTaskBtn">
-          <span class="plus-icon" aria-hidden="true">+</span> Create Task
+      <div class="sidebar-divider"></div>
+
+      <div class="sidebar-menu-group">
+        <button type="button" class="sidebar-row-btn" data-nav="mytasks" id="sideNavMyTasks">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <circle cx="8" cy="8" r="6"/>
+            <path d="M5.5 8.2l1.8 1.8 3.4-3.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>My tasks</span>
+          <span class="sidebar-count-muted" id="badgePendingCount">0</span>
+        </button>
+        <button type="button" class="sidebar-row-btn" data-nav="board" id="sideNavProjects">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <rect x="2.5" y="2.5" width="11" height="11" rx="2"/>
+            <path d="M5.5 6h5M5.5 8.5h5M5.5 11h3" stroke-linecap="round"/>
+          </svg>
+          <span>Projects</span>
+        </button>
+        <button type="button" class="sidebar-row-btn" data-nav="overview" id="sideNavPortfolios">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M2 4.5a1 1 0 0 1 1-1h3.2l1.5 1.5H13a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4.5z"/>
+          </svg>
+          <span>Portfolios</span>
         </button>
       </div>
 
-      <nav class="sidebar-nav" aria-label="Views">
-        <div class="nav-group-label">Workspace</div>
-        <button type="button" class="nav-item active" data-view="overview" id="navOverview">
-          <span class="nav-icon" aria-hidden="true">🏠</span>
-          <span>Home &amp; Overview</span>
-        </button>
-        <button type="button" class="nav-item" data-view="list" id="navList">
-          <span class="nav-icon" aria-hidden="true">☰</span>
-          <span>My Tasks (List)</span>
-          <span class="nav-badge" id="badgePendingCount">0</span>
-        </button>
-        <button type="button" class="nav-item" data-view="board" id="navBoard">
-          <span class="nav-icon" aria-hidden="true">▤</span>
-          <span>Kanban Board</span>
-        </button>
-        <button type="button" class="nav-item" data-view="calendar" id="navCalendar">
-          <span class="nav-icon" aria-hidden="true">📅</span>
-          <span>Calendar &amp; Deadlines</span>
-          <span class="nav-badge badge-urgent" id="badgeDueSoonCount" hidden>0</span>
-        </button>
-      </nav>
+      <div class="sidebar-divider"></div>
 
-      <div class="sidebar-section">
-        <div class="sidebar-section-header">
-          <span class="nav-group-label">Projects</span>
-          <button type="button" class="icon-btn-sm" id="openNewProjectModalBtn" title="Add Project" aria-label="Add new project">+</button>
+      <!-- Projects Collapsible Section -->
+      <div class="sidebar-projects-section">
+        <div class="sidebar-projects-header">
+          <span class="projects-caret-label">▾ Work</span>
+          <button type="button" class="sidebar-plus-btn" id="openNewProjectModalBtn" title="New project" aria-label="Create new project">+</button>
         </div>
-        <div class="project-list" id="sidebarProjectList" role="list">
-          <!-- Dynamically populated project pills -->
+        <div class="sidebar-project-list" id="sidebarProjectList" role="list">
+          <!-- Dynamically populated project items -->
         </div>
       </div>
 
-      <div class="sidebar-footer">
-        <div class="gcal-status-card" id="sidebarGcalCard">
-          <div class="gcal-status-top">
-            <span class="status-dot" id="gcalStatusDot" aria-hidden="true"></span>
-            <span class="gcal-status-title" id="gcalStatusText">Google Calendar</span>
-          </div>
-          <p class="gcal-status-sub" id="gcalStatusSub">1-Click &amp; .ics ready • Connect API for live 2-way sync</p>
-          <div class="gcal-status-actions">
-            <button type="button" class="btn btn-secondary btn-xs" id="openGcalModalBtn">
-              ⚙️ Calendar Sync
-            </button>
-            <button type="button" class="btn btn-ghost btn-xs" id="exportAllIcsBtn" title="Download all tasks as .ics calendar file">
-              ⬇️ .ics
-            </button>
-          </div>
-        </div>
-
-        <div class="sidebar-bottom-bar">
-          <button type="button" class="btn btn-ghost btn-xs" id="openSyncBackupModalBtn" title="Backup, JSON Export/Import &amp; GitHub Gist Sync">
-            ☁️ Backup &amp; Sync
-          </button>
-          <button type="button" class="btn btn-ghost btn-xs" id="themeToggleBtn" title="Switch color theme" aria-label="Switch color theme">
-            🌗 Theme
-          </button>
-        </div>
+      <div class="sidebar-bottom-actions">
+        <button type="button" class="asana-invite-btn" id="openSyncBackupModalBtn">
+          <span>☁️ Backup &amp; Export (.ics / .json)</span>
+        </button>
       </div>
     </aside>
 
-    <!-- Main Workspace Area -->
-    <div class="main-wrapper">
-      <!-- Top Header Bar -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <button type="button" class="icon-btn mobile-only" id="openSidebarBtn" aria-label="Open navigation menu">
-            ☰
-          </button>
-          <div>
-            <div class="topbar-title-row">
-              <h1 class="page-title" id="currentViewTitle">Home &amp; Overview</h1>
-              <span class="project-filter-pill" id="activeProjectPill" hidden>
-                <span id="activeProjectPillName"></span>
-                <button type="button" class="pill-clear-btn" id="clearProjectFilterBtn" aria-label="Clear project filter">✕</button>
-              </span>
-            </div>
-            <p class="page-subtitle" id="currentDateDisplay">Loading date...</p>
+    <!-- MAIN WHITE WORKSPACE CANVAS -->
+    <main class="asana-main-canvas">
+      <!-- Project Header (Matches "Thesis" header in screenshot) -->
+      <header class="asana-project-header">
+        <div class="project-header-top">
+          <div class="project-title-group">
+            <span class="project-square-badge" id="currentProjectBadge" style="background-color: #f06a9a;">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#1e1f21" stroke-width="1.8" aria-hidden="true">
+                <path d="M6 4h7M6 8h7M6 12h7" stroke-linecap="round"/>
+                <circle cx="3" cy="4" r="1" fill="#1e1f21"/>
+                <circle cx="3" cy="8" r="1" fill="#1e1f21"/>
+                <circle cx="3" cy="12" r="1" fill="#1e1f21"/>
+              </svg>
+            </span>
+            <h1 class="asana-project-title" id="currentViewTitle" title="Click to rename project">To do list</h1>
+            <button type="button" class="project-meta-icon" id="renameProjectBtn" title="Rename project" aria-label="Rename project">⌄</button>
+            <button type="button" class="project-meta-icon" id="starProjectBtn" title="Favorite project" aria-label="Star project">☆</button>
+          </div>
+
+          <div class="project-header-right">
+            <div class="gh-avatar gh-avatar-sm" title="Guillermo">GH</div>
+            <button type="button" class="asana-share-btn" id="topbarSyncGcalBtn">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <rect x="2" y="3" width="12" height="11" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                <path d="M2 6.5h12" stroke="currentColor" stroke-width="1.6"/>
+              </svg>
+              <span>Sync Calendar</span>
+            </button>
+            <button type="button" class="asana-customize-btn" id="exportAllIcsBtn" title="Download .ics calendar file for Google Calendar">
+              <span>⊞ Export .ics</span>
+            </button>
           </div>
         </div>
 
-        <div class="topbar-center">
-          <form id="searchForm" class="search-bar" role="search">
-            <label for="globalSearchInput" class="visually-hidden">Search tasks, tags, or projects</label>
-            <span class="search-icon" aria-hidden="true">🔍</span>
-            <input
-              type="search"
-              id="globalSearchInput"
-              placeholder="Search tasks, #tags, or deadlines... (Press /)"
-              autocomplete="off"
-            >
-            <button type="submit" class="visually-hidden">Search</button>
-          </form>
-        </div>
-
-        <div class="topbar-right">
-          <div class="filter-controls">
-            <label for="priorityFilterSelect" class="visually-hidden">Filter by priority</label>
-            <select id="priorityFilterSelect" class="select-sm" title="Filter by priority">
-              <option value="all">All Priorities</option>
-              <option value="urgent">🔥 Urgent</option>
-              <option value="high">🔴 High</option>
-              <option value="medium">🟡 Medium</option>
-              <option value="low">🔵 Low</option>
-            </select>
-
-            <label for="statusFilterSelect" class="visually-hidden">Filter by completion</label>
-            <select id="statusFilterSelect" class="select-sm" title="Filter by status">
-              <option value="all">All Tasks</option>
-              <option value="active">Active Only</option>
-              <option value="overdue">Overdue &amp; Due Today</option>
-              <option value="completed">Completed</option>
-            </select>
-          </div>
-
-          <button type="button" class="btn btn-secondary btn-sm" id="topbarSyncGcalBtn" title="Sync with Google Calendar">
-            📅 Sync Calendar
-          </button>
-          <button type="button" class="btn btn-primary btn-sm" id="topbarNewTaskBtn">
-            + Add Task
-          </button>
+        <!-- Project View Tabs: Overview | List | Board | Calendar | + -->
+        <div class="asana-project-tabs" role="tablist">
+          <button type="button" class="project-tab" data-view="overview" role="tab">Overview</button>
+          <button type="button" class="project-tab active" data-view="list" role="tab">List</button>
+          <button type="button" class="project-tab" data-view="board" role="tab">Board</button>
+          <button type="button" class="project-tab" data-view="calendar" role="tab">Calendar</button>
+          <button type="button" class="project-tab-plus" id="tabAddProjectBtn" title="Create new project" aria-label="Create new project">+</button>
         </div>
       </header>
 
-      <!-- Quick Add Task Bar (Always accessible at top of workspace) -->
-      <section class="quick-capture-bar" aria-label="Quick Add Task">
-        <form id="quickAddTaskForm" class="quick-add-form">
-          <label for="quickTaskTitle" class="visually-hidden">Quick task title</label>
-          <input
-            type="text"
-            id="quickTaskTitle"
-            class="quick-input-title"
-            placeholder="⚡ Quick add a task... (e.g. 'Submit tax report by Friday' — press Enter to save)"
-            required
-          >
+      <!-- Action Toolbar below Tabs (+ Add task | Filter | Sort | Group | Options) -->
+      <div class="asana-sub-toolbar" id="listActionToolbar">
+        <div class="sub-toolbar-left">
+          <div class="add-task-split-btn">
+            <button type="button" class="add-task-main-btn" id="inlineAddTaskBtn">+ Add task</button>
+            <button type="button" class="add-task-drop-btn" id="inlineAddSectionTopBtn" title="Add section" aria-label="Add section">⌄</button>
+          </div>
+        </div>
 
-          <label for="quickTaskProject" class="visually-hidden">Task project</label>
-          <select id="quickTaskProject" class="select-sm" title="Select project">
-            <!-- Populated by JS -->
+        <div class="sub-toolbar-right">
+          <label for="statusFilterSelect" class="visually-hidden">Filter tasks</label>
+          <select id="statusFilterSelect" class="toolbar-Ghost-select" title="Filter tasks">
+            <option value="all">≡ Filter</option>
+            <option value="active">≡ Filter: Incomplete</option>
+            <option value="overdue">≡ Filter: Due / Overdue</option>
+            <option value="completed">≡ Filter: Completed</option>
           </select>
 
-          <label for="quickTaskSection" class="visually-hidden">Task section</label>
-          <select id="quickTaskSection" class="select-sm" title="Asana section">
-            <option value="today">📌 Today</option>
-            <option value="upcoming" selected>🗓️ Upcoming</option>
-            <option value="later">⏳ Later</option>
+          <label for="sortSelect" class="visually-hidden">Sort tasks</label>
+          <select id="sortSelect" class="toolbar-Ghost-select" title="Sort tasks">
+            <option value="manual">⇅ Sort</option>
+            <option value="dueDate">⇅ Sort: Due date</option>
+            <option value="priority">⇅ Sort: Priority</option>
+            <option value="title">⇅ Sort: Alphabetical</option>
           </select>
 
-          <label for="quickTaskDue" class="visually-hidden">Due date</label>
-          <input type="date" id="quickTaskDue" class="input-sm" title="Deadline date">
-
-          <label for="quickTaskTime" class="visually-hidden">Due time</label>
-          <input type="time" id="quickTaskTime" class="input-sm" title="Deadline time (optional)">
-
-          <label for="quickTaskPriority" class="visually-hidden">Priority</label>
-          <select id="quickTaskPriority" class="select-sm" title="Task priority">
-            <option value="medium" selected>🟡 Medium</option>
+          <label for="priorityFilterSelect" class="visually-hidden">Filter by Priority</label>
+          <select id="priorityFilterSelect" class="toolbar-Ghost-select" title="Filter by Priority">
+            <option value="all">⊞ Priority: All</option>
             <option value="urgent">🔥 Urgent</option>
             <option value="high">🔴 High</option>
+            <option value="medium">🟡 Medium</option>
             <option value="low">🔵 Low</option>
           </select>
 
-          <button type="submit" class="btn btn-primary btn-sm">Add Task</button>
-        </form>
+          <button type="button" class="toolbar-action-link" id="toolbarOptionsGcalBtn">⚙️ Options</button>
+        </div>
+      </div>
+
+      <!-- =================================================================
+           VIEW 1 (DEFAULT): EXACT ASANA SPREADSHEET LIST VIEW
+           ================================================================= -->
+      <section class="asana-view active" id="view-list" aria-label="Task List">
+        <div class="asana-grid-scroll" role="region" aria-label="Tasks Spreadsheet" tabindex="0">
+          <table class="asana-spreadsheet-table" id="asanaSpreadsheetTable">
+            <caption class="visually-hidden">Project Tasks</caption>
+            <thead>
+              <tr>
+                <th scope="col" class="col-name">Name</th>
+                <th scope="col" class="col-assignee">Assignee</th>
+                <th scope="col" class="col-duedate">Due date</th>
+                <th scope="col" class="col-priority">Priority</th>
+                <th scope="col" class="col-plus" title="Google Calendar &amp; Actions">+</th>
+              </tr>
+            </thead>
+            <tbody id="asanaSpreadsheetBody">
+              <!-- Populated dynamically by app.js with inline editable rows & sections -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="asana-add-section-row">
+          <button type="button" class="asana-add-section-btn" id="bottomAddSectionBtn">
+            <span>+</span> Add section
+          </button>
+        </div>
       </section>
 
-      <!-- Main Content Views Container -->
-      <main class="workspace-content" id="workspaceContent">
+      <!-- =================================================================
+           VIEW 2: KANBAN BOARD VIEW
+           ================================================================= -->
+      <section class="asana-view" id="view-board" aria-label="Kanban Board" hidden>
+        <div class="kanban-board" id="kanbanBoard">
+          <!-- Populated by app.js -->
+        </div>
+      </section>
 
-        <!-- VIEW 1: HOME & OVERVIEW DASHBOARD -->
-        <section class="view-section active" id="view-overview" aria-labelledby="overviewHeading">
-          <h2 id="overviewHeading" class="visually-hidden">Workspace Overview</h2>
+      <!-- =================================================================
+           VIEW 3: CALENDAR & DEADLINES VIEW
+           ================================================================= -->
+      <section class="asana-view" id="view-calendar" aria-label="Calendar" hidden>
+        <div class="calendar-bar">
+          <div class="calendar-bar-left">
+            <h2 class="cal-month-title" id="calendarHeading">Month Year</h2>
+            <button type="button" class="asana-customize-btn" id="calPrevMonthBtn">◀</button>
+            <button type="button" class="asana-customize-btn" id="calTodayBtn">Today</button>
+            <button type="button" class="asana-customize-btn" id="calNextMonthBtn">▶</button>
+          </div>
+          <div class="calendar-bar-right">
+            <button type="button" class="asana-customize-btn" id="calImportIcsBtn">📥 Import .ics</button>
+            <button type="button" class="asana-share-btn" id="calPushAllToGcalBtn">🔄 Push Deadlines to GCal</button>
+          </div>
+        </div>
+        <div class="calendar-grid-wrapper">
+          <div class="calendar-weekdays">
+            <div>MON</div>
+            <div>TUE</div>
+            <div>WED</div>
+            <div>THU</div>
+            <div>FRI</div>
+            <div>SAT</div>
+            <div>SUN</div>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+        </div>
+      </section>
 
-          <!-- KPI Metric Cards -->
+      <!-- =================================================================
+           VIEW 4: OVERVIEW VIEW
+           ================================================================= -->
+      <section class="asana-view" id="view-overview" aria-label="Project Overview" hidden>
+        <div class="overview-container">
           <div class="stats-grid">
-            <article class="stat-card stat-overdue">
-              <div class="stat-header">
-                <span class="stat-label">Overdue</span>
-                <span class="stat-icon" aria-hidden="true">⚠️</span>
-              </div>
+            <div class="stat-card">
+              <div class="stat-label">Overdue</div>
               <div class="stat-value" id="statOverdueCount">0</div>
-              <div class="stat-foot">Needs immediate attention</div>
-            </article>
-
-            <article class="stat-card stat-today">
-              <div class="stat-header">
-                <span class="stat-label">Due Today</span>
-                <span class="stat-icon" aria-hidden="true">🎯</span>
-              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Due Today</div>
               <div class="stat-value" id="statDueTodayCount">0</div>
-              <div class="stat-foot">Scheduled for today</div>
-            </article>
-
-            <article class="stat-card stat-upcoming">
-              <div class="stat-header">
-                <span class="stat-label">Next 7 Days</span>
-                <span class="stat-icon" aria-hidden="true">📅</span>
-              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Upcoming (7 Days)</div>
               <div class="stat-value" id="statWeekCount">0</div>
-              <div class="stat-foot">Upcoming deadlines</div>
-            </article>
-
-            <article class="stat-card stat-completed">
-              <div class="stat-header">
-                <span class="stat-label">Completed</span>
-                <span class="stat-icon" aria-hidden="true">✅</span>
-              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">Completed</div>
               <div class="stat-value" id="statCompletedCount">0</div>
-              <div class="stat-foot" id="statCompletionRate">0% completion rate</div>
-            </article>
-          </div>
-
-          <!-- Two-Column Dashboard Panels -->
-          <div class="overview-columns">
-            <!-- Left: Priority & Due Soon Tasks -->
-            <div class="dashboard-card">
-              <div class="card-header">
-                <div>
-                  <h3 class="card-title">🔥 Priorities &amp; Upcoming Deadlines</h3>
-                  <p class="card-subtitle">Tasks due soonest or marked high/urgent priority</p>
-                </div>
-                <button type="button" class="btn btn-ghost btn-xs" data-goto-view="list">View all →</button>
-              </div>
-              <div class="dashboard-task-list" id="overviewUrgentList">
-                <!-- Populated by JS -->
-              </div>
-            </div>
-
-            <!-- Right: Google Calendar & Today's Schedule -->
-            <div class="dashboard-card">
-              <div class="card-header">
-                <div>
-                  <h3 class="card-title">📅 Google Calendar &amp; Deadlines Feed</h3>
-                  <p class="card-subtitle">Merged view of your tasks and Google Calendar events</p>
-                </div>
-                <div class="card-header-actions">
-                  <button type="button" class="btn btn-secondary btn-xs" id="overviewConnectGcalBtn">
-                    Sync Google Calendar
-                  </button>
-                </div>
-              </div>
-              <div class="dashboard-agenda-list" id="overviewAgendaList">
-                <!-- Populated by JS -->
-              </div>
+              <div class="stat-sub" id="statCompletionRate">0%</div>
             </div>
           </div>
 
-          <!-- Projects Progress Breakdown -->
-          <div class="dashboard-card">
-            <div class="card-header">
-              <div>
-                <h3 class="card-title">📁 Projects Progress</h3>
-                <p class="card-subtitle">Click a project to filter your tasks across List, Board, and Calendar views</p>
-              </div>
-              <button type="button" class="btn btn-secondary btn-xs" id="overviewNewProjectBtn">+ New Project</button>
+          <div class="overview-panels">
+            <div class="overview-box">
+              <h3>Upcoming Deadlines</h3>
+              <div id="overviewUrgentList" class="overview-list"></div>
             </div>
-            <div class="project-cards-grid" id="overviewProjectsGrid">
-              <!-- Populated by JS -->
+            <div class="overview-box">
+              <h3>Google Calendar &amp; Schedule Feed</h3>
+              <div id="overviewAgendaList" class="overview-list"></div>
             </div>
           </div>
-        </section>
-
-        <!-- VIEW 2: ASANA MY TASKS LIST VIEW -->
-        <section class="view-section" id="view-list" aria-labelledby="listHeading" hidden>
-          <div class="view-toolbar">
-            <div class="toolbar-left">
-              <h2 id="listHeading" class="section-heading">My Tasks List</h2>
-              <div class="segmented-control" role="group" aria-label="Group tasks by">
-                <button type="button" class="segment-btn active" data-groupby="section">By Section (Today / Upcoming / Later)</button>
-                <button type="button" class="segment-btn" data-groupby="status">By Status</button>
-                <button type="button" class="segment-btn" data-groupby="project">By Project</button>
-              </div>
-            </div>
-            <div class="toolbar-right">
-              <button type="button" class="btn btn-ghost btn-xs" id="expandAllSectionsBtn">Expand All</button>
-              <button type="button" class="btn btn-ghost btn-xs" id="collapseAllSectionsBtn">Collapse All</button>
-            </div>
-          </div>
-
-          <div class="asana-list-container" id="asanaListContainer">
-            <!-- Collapsible Asana sections rendered here by JS -->
-          </div>
-        </section>
-
-        <!-- VIEW 3: KANBAN BOARD VIEW -->
-        <section class="view-section" id="view-board" aria-labelledby="boardHeading" hidden>
-          <div class="view-toolbar">
-            <div class="toolbar-left">
-              <h2 id="boardHeading" class="section-heading">Kanban Board</h2>
-              <span class="toolbar-hint">Drag and drop cards between columns or click a card to edit subtasks &amp; Google Calendar sync</span>
-            </div>
-          </div>
-
-          <div class="kanban-board" id="kanbanBoard">
-            <!-- Columns: todo, in_progress, review, done -->
-          </div>
-        </section>
-
-        <!-- VIEW 4: CALENDAR & DEADLINES VIEW -->
-        <section class="view-section" id="view-calendar" aria-labelledby="calendarHeading" hidden>
-          <div class="view-toolbar calendar-toolbar">
-            <div class="toolbar-left">
-              <h2 id="calendarHeading" class="section-heading" id="calendarMonthLabel">Month Year</h2>
-              <div class="calendar-nav-btns">
-                <button type="button" class="btn btn-secondary btn-xs" id="calPrevMonthBtn" aria-label="Previous month">◀ Prev</button>
-                <button type="button" class="btn btn-secondary btn-xs" id="calTodayBtn">Today</button>
-                <button type="button" class="btn btn-secondary btn-xs" id="calNextMonthBtn" aria-label="Next month">Next ▶</button>
-              </div>
-            </div>
-
-            <div class="toolbar-right">
-              <span class="legend-item"><span class="legend-dot dot-task"></span> Asana Task</span>
-              <span class="legend-item"><span class="legend-dot dot-gcal"></span> Google Calendar Event</span>
-              <button type="button" class="btn btn-secondary btn-xs" id="calImportIcsBtn">📥 Import .ics</button>
-              <button type="button" class="btn btn-primary btn-xs" id="calPushAllToGcalBtn">🔄 Push Deadlines to GCal</button>
-            </div>
-          </div>
-
-          <div class="calendar-layout">
-            <div class="calendar-grid-wrapper">
-              <div class="calendar-weekdays">
-                <div>Mon</div>
-                <div>Tue</div>
-                <div>Wed</div>
-                <div>Thu</div>
-                <div>Fri</div>
-                <div>Sat</div>
-                <div>Sun</div>
-              </div>
-              <div class="calendar-grid" id="calendarGrid">
-                <!-- 42 day cells rendered by JS -->
-              </div>
-            </div>
-
-            <!-- Upcoming Deadlines & Events Sidebar -->
-            <aside class="calendar-side-agenda" aria-label="Upcoming Deadlines Chronological List">
-              <h3 class="side-agenda-title">⏳ Chronological Deadlines</h3>
-              <p class="side-agenda-subtitle">Click any task to open details or send to Google Calendar</p>
-              <div class="side-agenda-list" id="calendarSideAgendaList">
-                <!-- Rendered by JS -->
-              </div>
-            </aside>
-          </div>
-        </section>
-
-      </main>
-    </div>
+        </div>
+      </section>
+    </main>
 
     <!-- ASANA RIGHT SLIDE-OVER TASK DETAIL DRAWER -->
     <aside class="task-drawer" id="taskDrawer" aria-label="Task Details" hidden>
       <div class="drawer-header">
-        <div class="drawer-header-left">
-          <label class="drawer-complete-btn" for="drawerTaskCompleted">
-            <input type="checkbox" id="drawerTaskCompleted" class="visually-hidden">
-            <span id="drawerCompleteLabelText">Mark Complete</span>
-          </label>
-        </div>
+        <label class="drawer-complete-btn" for="drawerTaskCompleted">
+          <input type="checkbox" id="drawerTaskCompleted" class="visually-hidden">
+          <span id="drawerCompleteLabelText">✓ Mark complete</span>
+        </label>
         <div class="drawer-header-actions">
-          <button type="button" class="btn btn-secondary btn-xs" id="drawerAddToGcalLinkBtn" title="Open in Google Calendar web tab">
-            📅 +GCal Link
+          <button type="button" class="asana-customize-btn btn-xs" id="drawerAddToGcalLinkBtn" title="Open in Google Calendar">
+            📅 +GCal
           </button>
-          <button type="button" class="btn btn-secondary btn-xs" id="drawerPushGcalApiBtn" title="Sync directly via Google Calendar API">
-            🔄 API Sync
+          <button type="button" class="asana-customize-btn btn-xs" id="drawerPushGcalApiBtn" title="Push directly to Google Calendar API">
+            🔄 Sync API
           </button>
-          <button type="button" class="btn btn-ghost btn-xs" id="drawerDownloadIcsBtn" title="Download single task .ics">
+          <button type="button" class="asana-customize-btn btn-xs" id="drawerDownloadIcsBtn" title="Download .ics">
             ⬇️ .ics
           </button>
-          <button type="button" class="btn btn-danger-ghost btn-xs" id="drawerDeleteTaskBtn" title="Delete task">
+          <button type="button" class="asana-customize-btn btn-xs danger-text" id="drawerDeleteTaskBtn" title="Delete task">
             🗑️
           </button>
-          <button type="button" class="icon-btn" id="closeDrawerBtn" aria-label="Close task details panel">
-            ✕
-          </button>
+          <button type="button" class="project-meta-icon" id="closeDrawerBtn" aria-label="Close panel">✕</button>
         </div>
       </div>
 
@@ -415,230 +398,152 @@
         <form id="drawerTaskForm" class="drawer-form">
           <input type="hidden" id="drawerTaskId">
 
-          <div class="form-group">
-            <label for="drawerTaskTitle" class="visually-hidden">Task Title</label>
-            <input
-              type="text"
-              id="drawerTaskTitle"
-              class="drawer-title-input"
-              placeholder="Task name..."
-              required
-            >
-          </div>
+          <label for="drawerTaskTitle" class="visually-hidden">Task Name</label>
+          <input type="text" id="drawerTaskTitle" class="drawer-title-input" placeholder="Write a task name" required>
 
           <div class="drawer-meta-grid">
             <div class="meta-row">
-              <label for="drawerTaskProject" class="meta-label">Project</label>
-              <select id="drawerTaskProject" class="input-sm">
-                <!-- Populated by JS -->
-              </select>
+              <span class="meta-label">Assignee</span>
+              <span class="meta-val"><span class="gh-avatar gh-avatar-xs">GH</span> Guillermo</span>
             </div>
-
+            <div class="meta-row">
+              <label for="drawerTaskProject" class="meta-label">Project</label>
+              <select id="drawerTaskProject" class="drawer-input"></select>
+            </div>
             <div class="meta-row">
               <label for="drawerTaskSection" class="meta-label">Section</label>
-              <select id="drawerTaskSection" class="input-sm">
-                <option value="today">📌 Today</option>
-                <option value="upcoming">🗓️ Upcoming</option>
-                <option value="later">⏳ Later</option>
+              <select id="drawerTaskSection" class="drawer-input"></select>
+            </div>
+            <div class="meta-row">
+              <label for="drawerTaskStatus" class="meta-label">Board Status</label>
+              <select id="drawerTaskStatus" class="drawer-input">
+                <option value="todo">To do</option>
+                <option value="in_progress">Doing</option>
+                <option value="review">Review</option>
+                <option value="done">Done</option>
               </select>
             </div>
-
             <div class="meta-row">
-              <label for="drawerTaskStatus" class="meta-label">Board Column</label>
-              <select id="drawerTaskStatus" class="input-sm">
-                <option value="todo">⚪ To Do</option>
-                <option value="in_progress">🔵 In Progress</option>
-                <option value="review">🟣 In Review</option>
-                <option value="done">🟢 Done</option>
-              </select>
-            </div>
-
-            <div class="meta-row">
-              <label for="drawerTaskPriority" class="meta-label">Priority</label>
-              <select id="drawerTaskPriority" class="input-sm">
-                <option value="low">🔵 Low</option>
-                <option value="medium">🟡 Medium</option>
-                <option value="high">🔴 High</option>
-                <option value="urgent">🔥 Urgent</option>
-              </select>
-            </div>
-
-            <div class="meta-row">
-              <label for="drawerTaskDueDate" class="meta-label">Due Date</label>
-              <input type="date" id="drawerTaskDueDate" class="input-sm">
-            </div>
-
-            <div class="meta-row">
-              <label for="drawerTaskDueTime" class="meta-label">Time &amp; Duration</label>
+              <label for="drawerTaskDueDate" class="meta-label">Due date</label>
               <div class="inline-inputs">
-                <input type="time" id="drawerTaskDueTime" class="input-sm" title="Start/Deadline time">
-                <label for="drawerTaskDuration" class="visually-hidden">Duration in minutes</label>
-                <select id="drawerTaskDuration" class="input-sm" title="Event duration on Google Calendar">
+                <input type="date" id="drawerTaskDueDate" class="drawer-input">
+                <input type="time" id="drawerTaskDueTime" class="drawer-input" title="Time (optional)">
+              </div>
+            </div>
+            <div class="meta-row">
+              <label for="drawerTaskDuration" class="meta-label">Duration &amp; Repeat</label>
+              <div class="inline-inputs">
+                <select id="drawerTaskDuration" class="drawer-input">
                   <option value="30">30 min</option>
                   <option value="60" selected>1 hr</option>
                   <option value="90">1.5 hr</option>
                   <option value="120">2 hrs</option>
                   <option value="allday">All Day</option>
                 </select>
+                <select id="drawerTaskRecurrence" class="drawer-input">
+                  <option value="none">No repeat</option>
+                  <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Biweekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
               </div>
             </div>
-
             <div class="meta-row">
-              <label for="drawerTaskRecurrence" class="meta-label">Repeat</label>
-              <select id="drawerTaskRecurrence" class="input-sm">
-                <option value="none">Does not repeat</option>
-                <option value="daily">🔁 Daily</option>
-                <option value="weekly">🔁 Weekly</option>
-                <option value="biweekly">🔁 Every 2 Weeks</option>
-                <option value="monthly">🔁 Monthly</option>
+              <label for="drawerTaskPriority" class="meta-label">Priority</label>
+              <select id="drawerTaskPriority" class="drawer-input">
+                <option value="">—</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
               </select>
             </div>
-
             <div class="meta-row">
-              <label for="drawerTaskTags" class="meta-label">Tags (comma separated)</label>
-              <input
-                type="text"
-                id="drawerTaskTags"
-                class="input-sm"
-                placeholder="e.g. exam, urgent, client"
-              >
+              <label for="drawerTaskTags" class="meta-label">Tags</label>
+              <input type="text" id="drawerTaskTags" class="drawer-input" placeholder="Comma separated...">
             </div>
           </div>
 
           <div class="form-group">
-            <label for="drawerTaskDescription" class="field-label">Description &amp; Notes</label>
-            <textarea
-              id="drawerTaskDescription"
-              class="drawer-textarea"
-              rows="4"
-              placeholder="Add notes, links, meeting details, or acceptance criteria..."
-            ></textarea>
+            <label for="drawerTaskDescription" class="meta-label">Description</label>
+            <textarea id="drawerTaskDescription" class="drawer-textarea" rows="4" placeholder="What is this task about?"></textarea>
           </div>
 
           <div class="drawer-save-row">
-            <span class="gcal-sync-pill" id="drawerGcalSyncPill">Not synced to Google Calendar yet</span>
-            <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+            <span class="gcal-sync-pill" id="drawerGcalSyncPill">Ready to sync with Google Calendar</span>
+            <button type="submit" class="asana-share-btn">Save</button>
           </div>
         </form>
 
-        <!-- Subtasks Checklist Section -->
+        <!-- Subtasks Checklist -->
         <div class="drawer-subtasks-section">
           <div class="subtasks-header">
-            <h3 class="field-label">Subtasks (<span id="drawerSubtaskProgress">0/0</span>)</h3>
+            <span class="meta-label">Subtasks (<span id="drawerSubtaskProgress">0/0</span>)</span>
             <progress id="drawerSubtaskProgressBar" max="100" value="0">0%</progress>
           </div>
-
-          <ul class="subtask-list" id="drawerSubtaskList">
-            <!-- Populated by JS -->
-          </ul>
-
+          <ul class="subtask-list" id="drawerSubtaskList"></ul>
           <form id="addSubtaskForm" class="subtask-add-form">
-            <label for="newSubtaskInput" class="visually-hidden">Add a subtask</label>
-            <input
-              type="text"
-              id="newSubtaskInput"
-              class="input-sm"
-              placeholder="Add a subtask... (Press Enter)"
-              required
-            >
-            <button type="submit" class="btn btn-secondary btn-xs">Add</button>
+            <label for="newSubtaskInput" class="visually-hidden">New subtask</label>
+            <input type="text" id="newSubtaskInput" class="drawer-input" placeholder="+ Add subtask (Press Enter)" required>
+            <button type="submit" class="asana-customize-btn">Add</button>
           </form>
         </div>
       </div>
     </aside>
   </div>
 
-  <!-- MODAL 1: CREATE / EDIT TASK MODAL (Light-Dismiss Dialog) -->
-  <!-- MANDATORY: Use closedby="any" to enable light-dismiss behavior -->
+  <!-- MODAL 1: CREATE TASK MODAL (Light-Dismiss Dialog) -->
   <dialog id="taskModal" closedby="any" aria-labelledby="taskModalTitle" class="app-dialog">
     <div class="dialog-inner">
       <div class="dialog-header">
-        <h2 id="taskModalTitle">Create New Task</h2>
-        <button type="button" class="icon-btn" data-close-dialog="taskModal" aria-label="Close modal">✕</button>
+        <h2 id="taskModalTitle">Create task</h2>
+        <button type="button" class="project-meta-icon" data-close-dialog="taskModal" aria-label="Close">✕</button>
       </div>
       <form id="modalTaskForm" class="dialog-form">
         <div class="form-group">
-          <label for="modalTaskTitleInput" class="field-label">Task Name *</label>
-          <input type="text" id="modalTaskTitleInput" class="input-md" placeholder="e.g., Finish quarterly presentation" required>
+          <label for="modalTaskTitleInput" class="field-label">Task name *</label>
+          <input type="text" id="modalTaskTitleInput" class="input-md" placeholder="e.g. Determine project goal" required>
         </div>
-
         <div class="form-row-2">
           <div class="form-group">
             <label for="modalTaskProject" class="field-label">Project</label>
             <select id="modalTaskProject" class="input-md"></select>
           </div>
           <div class="form-group">
-            <label for="modalTaskSection" class="field-label">Asana Section</label>
-            <select id="modalTaskSection" class="input-md">
-              <option value="today">📌 Today</option>
-              <option value="upcoming" selected>🗓️ Upcoming</option>
-              <option value="later">⏳ Later</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row-2">
-          <div class="form-group">
-            <label for="modalTaskStatus" class="field-label">Board Status</label>
-            <select id="modalTaskStatus" class="input-md">
-              <option value="todo" selected>⚪ To Do</option>
-              <option value="in_progress">🔵 In Progress</option>
-              <option value="review">🟣 In Review</option>
-              <option value="done">🟢 Done</option>
-            </select>
-          </div>
-          <div class="form-group">
             <label for="modalTaskPriority" class="field-label">Priority</label>
             <select id="modalTaskPriority" class="input-md">
-              <option value="low">🔵 Low</option>
-              <option value="medium" selected>🟡 Medium</option>
-              <option value="high">🔴 High</option>
-              <option value="urgent">🔥 Urgent</option>
+              <option value="">— None —</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
             </select>
           </div>
         </div>
-
-        <div class="form-row-3">
+        <div class="form-row-2">
           <div class="form-group">
-            <label for="modalTaskDueDate" class="field-label">Deadline Date</label>
+            <label for="modalTaskDueDate" class="field-label">Due date</label>
             <input type="date" id="modalTaskDueDate" class="input-md">
           </div>
           <div class="form-group">
-            <label for="modalTaskDueTime" class="field-label">Time (Optional)</label>
+            <label for="modalTaskDueTime" class="field-label">Time (optional)</label>
             <input type="time" id="modalTaskDueTime" class="input-md">
           </div>
-          <div class="form-group">
-            <label for="modalTaskRecurrence" class="field-label">Recurrence</label>
-            <select id="modalTaskRecurrence" class="input-md">
-              <option value="none">One-time</option>
-              <option value="daily">🔁 Daily</option>
-              <option value="weekly">🔁 Weekly</option>
-              <option value="biweekly">🔁 Biweekly</option>
-              <option value="monthly">🔁 Monthly</option>
-            </select>
-          </div>
         </div>
-
         <div class="form-group">
-          <label for="modalTaskTags" class="field-label">Tags (comma separated)</label>
-          <input type="text" id="modalTaskTags" class="input-md" placeholder="e.g. deadline, deep-work, uni">
+          <label for="modalTaskDesc" class="field-label">Description</label>
+          <textarea id="modalTaskDesc" class="input-md" rows="3" placeholder="Add details..."></textarea>
         </div>
-
-        <div class="form-group">
-          <label for="modalTaskDesc" class="field-label">Description / Notes</label>
-          <textarea id="modalTaskDesc" class="input-md" rows="3" placeholder="Details, links, or subtasks (one per line if you want)..."></textarea>
-        </div>
-
         <div class="form-group checkbox-row">
           <label for="modalTaskAutoGcal">
             <input type="checkbox" id="modalTaskAutoGcal" class="visually-hidden">
-            <span>Also push to Google Calendar immediately if connected</span>
+            <span>Push to Google Calendar immediately</span>
           </label>
         </div>
-
         <div class="dialog-footer">
-          <button type="button" class="btn btn-ghost" data-close-dialog="taskModal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Task</button>
+          <button type="button" class="asana-customize-btn" data-close-dialog="taskModal">Cancel</button>
+          <button type="submit" class="asana-share-btn">Create task</button>
         </div>
       </form>
     </div>
@@ -648,196 +553,132 @@
   <dialog id="projectModal" closedby="any" aria-labelledby="projectModalTitle" class="app-dialog dialog-sm">
     <div class="dialog-inner">
       <div class="dialog-header">
-        <h2 id="projectModalTitle">Create Project</h2>
-        <button type="button" class="icon-btn" data-close-dialog="projectModal" aria-label="Close modal">✕</button>
+        <h2 id="projectModalTitle">New project</h2>
+        <button type="button" class="project-meta-icon" data-close-dialog="projectModal" aria-label="Close">✕</button>
       </div>
       <form id="projectModalForm" class="dialog-form">
         <div class="form-group">
-          <label for="newProjectName" class="field-label">Project Name *</label>
-          <input type="text" id="newProjectName" class="input-md" placeholder="e.g., Marketing Launch, Semester Exams" required>
+          <label for="newProjectName" class="field-label">Project name *</label>
+          <input type="text" id="newProjectName" class="input-md" placeholder="e.g. Thesis, To do list" required>
         </div>
-        <div class="form-row-2">
-          <div class="form-group">
-            <label for="newProjectIcon" class="field-label">Icon Emoji</label>
-            <input type="text" id="newProjectIcon" class="input-md" value="🚀" maxlength="4">
-          </div>
-          <div class="form-group">
-            <label for="newProjectColor" class="field-label">Color</label>
-            <input type="color" id="newProjectColor" class="input-color" value="#f06a6a">
-          </div>
+        <div class="form-group">
+          <label for="newProjectColor" class="field-label">Icon color</label>
+          <input type="color" id="newProjectColor" class="input-color" value="#f06a9a">
         </div>
         <div class="dialog-footer">
-          <button type="button" class="btn btn-ghost" data-close-dialog="projectModal">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Project</button>
+          <button type="button" class="asana-customize-btn" data-close-dialog="projectModal">Cancel</button>
+          <button type="submit" class="asana-share-btn">Create project</button>
         </div>
       </form>
     </div>
   </dialog>
 
-  <!-- MODAL 3: GOOGLE CALENDAR INTEGRATION MODAL (Light-Dismiss Dialog) -->
+  <!-- MODAL 3: GOOGLE CALENDAR SYNC MODAL (Light-Dismiss Dialog) -->
   <dialog id="gcalModal" closedby="any" aria-labelledby="gcalModalTitle" class="app-dialog dialog-lg">
     <div class="dialog-inner">
       <div class="dialog-header">
-        <h2 id="gcalModalTitle">📅 Google Calendar Connection &amp; .ics Feed</h2>
-        <button type="button" class="icon-btn" data-close-dialog="gcalModal" aria-label="Close modal">✕</button>
+        <h2 id="gcalModalTitle">📅 Google Calendar Sync</h2>
+        <button type="button" class="project-meta-icon" data-close-dialog="gcalModal" aria-label="Close">✕</button>
       </div>
-
       <div class="dialog-body">
-        <!-- Tier 1: Zero-Setup Out-of-the-Box -->
         <div class="integration-box">
           <div class="integration-box-header">
-            <h3>⚡ Option 1: Zero-Setup Calendar Sync (Works Immediately)</h3>
-            <span class="badge-pill badge-ready">Active Out-of-the-Box</span>
+            <h3>1-Click Calendar Links &amp; .ics Import/Export</h3>
+            <span class="badge-pill badge-ready">Ready</span>
           </div>
           <p class="integration-desc">
-            Every task has a 1-click <strong>+GCal</strong> button that opens Google Calendar pre-filled with your task's deadline and subtasks. You can also export all your AsanaFlow deadlines as an <code>.ics</code> file or import your Google Calendar <code>.ics</code> file below:
+            Click <strong>+GCal</strong> on any row to open it in Google Calendar, or export/import <code>.ics</code> files:
           </p>
           <div class="integration-actions">
-            <button type="button" class="btn btn-secondary btn-sm" id="modalExportIcsBtn">
-              ⬇️ Export All Tasks (.ics)
-            </button>
-            <label for="icsFileInput" class="btn btn-secondary btn-sm file-label-btn">
+            <button type="button" class="asana-customize-btn" id="modalExportIcsBtn">⬇️ Export All (.ics)</button>
+            <label for="icsFileInput" class="asana-customize-btn file-label-btn">
               📥 Import Google Calendar (.ics)
               <input type="file" id="icsFileInput" accept=".ics,text/calendar" hidden>
             </label>
-            <button type="button" class="btn btn-ghost btn-sm" id="clearImportedEventsBtn">
-              🗑️ Clear Imported Events (<span id="importedEventsCountLabel">0</span>)
+            <button type="button" class="asana-customize-btn" id="clearImportedEventsBtn">
+              🗑️ Clear Imported (<span id="importedEventsCountLabel">0</span>)
             </button>
           </div>
         </div>
 
-        <!-- Tier 2: Full 2-Way Live Google Calendar API Sync -->
         <div class="integration-box">
           <div class="integration-box-header">
-            <h3>🔄 Option 2: Live 2-Way Google Calendar API Sync (OAuth 2.0)</h3>
+            <h3>Live 2-Way Google Calendar API Sync (OAuth 2.0)</h3>
             <span class="badge-pill" id="modalGcalApiBadge">Disconnected</span>
           </div>
-          <p class="integration-desc">
-            Connect directly to the Google Calendar API from your browser on GitHub Pages. Read your upcoming Google Calendar events and push task deadlines directly to your calendar with 1 click.
-          </p>
-
           <form id="gcalConfigForm" class="dialog-form">
             <div class="form-row-2">
               <div class="form-group">
-                <label for="gcalClientIdInput" class="field-label">Google OAuth 2.0 Client ID</label>
-                <input
-                  type="text"
-                  id="gcalClientIdInput"
-                  class="input-md"
-                  placeholder="1234567890-abcdefg.apps.googleusercontent.com"
-                >
+                <label for="gcalClientIdInput" class="field-label">Google OAuth Client ID</label>
+                <input type="text" id="gcalClientIdInput" class="input-md" placeholder="xxxx.apps.googleusercontent.com">
               </div>
               <div class="form-group">
-                <label for="gcalCalendarIdInput" class="field-label">Target Calendar ID</label>
-                <input
-                  type="text"
-                  id="gcalCalendarIdInput"
-                  class="input-md"
-                  value="primary"
-                  placeholder="primary (or specific calendar email)"
-                >
+                <label for="gcalCalendarIdInput" class="field-label">Calendar ID</label>
+                <input type="text" id="gcalCalendarIdInput" class="input-md" value="primary">
               </div>
             </div>
-
             <div class="integration-actions">
-              <button type="submit" class="btn btn-primary btn-sm" id="connectGoogleApiBtn">
-                🔗 Save &amp; Connect with Google
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="fetchGcalEventsBtn">
-                🔄 Fetch Calendar Events (Next 60 Days)
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="pushAllTasksToGcalBtn">
-                📤 Push All Task Deadlines to Google Calendar
-              </button>
-              <button type="button" class="btn btn-ghost btn-sm" id="disconnectGoogleApiBtn">
-                Disconnect
-              </button>
+              <button type="submit" class="asana-share-btn">🔗 Connect Google Calendar</button>
+              <button type="button" class="asana-customize-btn" id="fetchGcalEventsBtn">🔄 Fetch Events</button>
+              <button type="button" class="asana-customize-btn" id="pushAllTasksToGcalBtn">📤 Push All Deadlines</button>
+              <button type="button" class="asana-customize-btn" id="disconnectGoogleApiBtn">Disconnect</button>
             </div>
           </form>
-
-          <details class="setup-guide-details">
-            <summary>📖 How to get a free Google OAuth Client ID for your GitHub Pages URL (2 mins)</summary>
-            <ol class="setup-steps">
-              <li>Go to the <a href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noopener">Google Cloud Console — Google Calendar API</a> and click <strong>Enable</strong>.</li>
-              <li>Go to <strong>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</strong> (Application type: <strong>Web application</strong>).</li>
-              <li>Under <strong>Authorized JavaScript origins</strong>, add your GitHub Pages domain: <code>https://guillermohern023.github.io</code> (and <code>http://localhost:8080</code> for local testing).</li>
-              <li>Copy your <strong>Client ID</strong> (ends with <code>.apps.googleusercontent.com</code>), paste it above, and click <strong>Save &amp; Connect with Google</strong>!</li>
-            </ol>
-          </details>
         </div>
       </div>
-
       <div class="dialog-footer">
-        <button type="button" class="btn btn-primary" data-close-dialog="gcalModal">Done</button>
+        <button type="button" class="asana-share-btn" data-close-dialog="gcalModal">Done</button>
       </div>
     </div>
   </dialog>
 
-  <!-- MODAL 4: BACKUP, RESTORE & GITHUB GIST CLOUD SYNC (Light-Dismiss Dialog) -->
+  <!-- MODAL 4: BACKUP & GIST SYNC MODAL -->
   <dialog id="syncBackupModal" closedby="any" aria-labelledby="syncBackupModalTitle" class="app-dialog dialog-lg">
     <div class="dialog-inner">
       <div class="dialog-header">
-        <h2 id="syncBackupModalTitle">☁️ Data Storage, JSON Backup &amp; GitHub Gist Sync</h2>
-        <button type="button" class="icon-btn" data-close-dialog="syncBackupModal" aria-label="Close modal">✕</button>
+        <h2 id="syncBackupModalTitle">☁️ Backup, JSON Restore &amp; Cloud Gist Sync</h2>
+        <button type="button" class="project-meta-icon" data-close-dialog="syncBackupModal" aria-label="Close">✕</button>
       </div>
-
       <div class="dialog-body">
         <div class="integration-box">
-          <h3>💾 Local Backup &amp; Restore (JSON)</h3>
-          <p class="integration-desc">
-            Your tasks and projects are automatically saved in your browser's <code>localStorage</code>. You can download a full backup JSON file anytime or restore from one:
-          </p>
+          <h3>Local JSON Backup</h3>
           <div class="integration-actions">
-            <button type="button" class="btn btn-primary btn-sm" id="exportJsonBtn">
-              ⬇️ Download Backup (.json)
-            </button>
-            <label for="importJsonInput" class="btn btn-secondary btn-sm file-label-btn">
-              📂 Restore from Backup (.json)
+            <button type="button" class="asana-share-btn" id="exportJsonBtn">⬇️ Download Backup (.json)</button>
+            <label for="importJsonInput" class="asana-customize-btn file-label-btn">
+              📂 Restore Backup (.json)
               <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
             </label>
-            <button type="button" class="btn btn-danger-ghost btn-sm" id="clearAllTasksBtn">
-              🗑️ Wipe All Data
-            </button>
+            <button type="button" class="asana-customize-btn danger-text" id="clearAllTasksBtn">🗑️ Wipe All Tasks</button>
           </div>
         </div>
-
         <div class="integration-box">
-          <h3>🐙 Cross-Device Cloud Sync via GitHub Gist (Optional)</h3>
-          <p class="integration-desc">
-            Since you host on GitHub Pages, you can sync your tasks across your PC and phone using a secret GitHub Gist — 100% free with zero backend servers.
-          </p>
+          <h3>GitHub Gist Cross-Device Sync</h3>
           <form id="gistSyncForm" class="dialog-form">
             <div class="form-row-2">
               <div class="form-group">
-                <label for="gistTokenInput" class="field-label">GitHub Personal Access Token (<code>gist</code> scope)</label>
-                <input type="password" id="gistTokenInput" class="input-md" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                <label for="gistTokenInput" class="field-label">GitHub Token (gist scope)</label>
+                <input type="password" id="gistTokenInput" class="input-md" placeholder="ghp_...">
               </div>
               <div class="form-group">
-                <label for="gistIdInput" class="field-label">Gist ID (leave blank to auto-create)</label>
+                <label for="gistIdInput" class="field-label">Gist ID</label>
                 <input type="text" id="gistIdInput" class="input-md" placeholder="Auto-created on first push">
               </div>
             </div>
             <div class="integration-actions">
-              <button type="submit" class="btn btn-primary btn-sm" id="gistPushBtn">
-                ☁️ Save &amp; Push to Cloud Gist
-              </button>
-              <button type="button" class="btn btn-secondary btn-sm" id="gistPullBtn">
-                📥 Pull Latest from Cloud Gist
-              </button>
+              <button type="submit" class="asana-share-btn">☁️ Push to Gist</button>
+              <button type="button" class="asana-customize-btn" id="gistPullBtn">📥 Pull from Gist</button>
             </div>
           </form>
         </div>
       </div>
-
       <div class="dialog-footer">
-        <button type="button" class="btn btn-primary" data-close-dialog="syncBackupModal">Close</button>
+        <button type="button" class="asana-share-btn" data-close-dialog="syncBackupModal">Close</button>
       </div>
     </div>
   </dialog>
 
-  <!-- Toast Notification Container -->
   <div class="toast-container" id="toastContainer" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
